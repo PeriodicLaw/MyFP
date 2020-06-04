@@ -9,7 +9,7 @@
 - [ ] 类型推导
 - [ ] 高阶类型
 
-## 预期效果效果
+## 预期效果
 
 ### 基本功能
 
@@ -20,6 +20,6 @@ add 3 4
 
 ```
 let fact:Int->Int = fix \f:Int->Int \x:Int
-	if x == 0 then 1 else (f(x-1))*x
+	if x == 0 then 1 else (f(x-1))*x;
 fact 5
 ```
