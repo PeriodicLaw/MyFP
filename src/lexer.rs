@@ -26,7 +26,7 @@ pub enum Token {
     Op(Op),
     Int(i32),
     Bool(bool),
-    Err
+    End, Err
 }
 pub struct TokenStream<'a> {
     chars: Peekable<Enumerate<Chars<'a>>>
@@ -159,7 +159,7 @@ impl Iterator for TokenStream<'_>{
                             ('0'..='9').contains(c)
                         }).map(|x|{x.1}).collect::<String>().parse::<i32>().unwrap())))
                     }
-                    ';' => None,
+                    ';' => Some((self.chars.peek()?.0, Token::End)),
                     _ => {
                         eprintln!("lexer: unrecognized char {}", c);
                         Some((self.chars.peek()?.0, Token::Err))
