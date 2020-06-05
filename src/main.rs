@@ -22,7 +22,7 @@ fn main() -> io::Result<()> {
                 Err(pos) => {
                     let pos = match pos {
                         Some(pos) => pos,
-                        None => input.len() // 如果token流已经结束，我们简单的把错误提示放到最末尾
+                        None => input.len() // 如果token流已经结束，我们简单地把错误提示放到最末尾
                     };
                     
                     let pos0 = if pos<5 {pos} else {5};

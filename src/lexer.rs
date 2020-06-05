@@ -43,7 +43,7 @@ impl Iterator for TokenStream<'_>{
         loop {
             return match self.chars.peek() {
                 Some((_, c)) => match c{
-                    ' ' | '\t' | '\n' => {
+                    ' ' | '\t' => {
                         self.chars.next();
                         continue
                     }
