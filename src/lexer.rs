@@ -1,8 +1,8 @@
 use std::str::Chars;
-use std::iter::Peekable;
+use std::iter::{Enumerate, Peekable};
 use peeking_take_while::PeekableExt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Op {
     Add, Minus, Mult, Divide, // + - * /
     Eq, NotEq, Less, LessEq, Gre, GreEq, // == != < <= > >=
@@ -10,145 +10,146 @@ pub enum Op {
     Lambda, To // \ ->
 }
 
-#[derive(Debug)]
-pub enum Token{
+#[derive(Debug, PartialEq, Clone)]
+pub enum Token {
     Identifier(String),
     KeyWord(String),
     Symbol(char), // ( ) [ ] = : , |
     Op(Op),
     Int(i32),
-    Bool(bool)
+    Bool(bool),
+    Err
 }
-pub struct TokenStream<'a>{
-    chars: Peekable<Chars<'a>>
+pub struct TokenStream<'a> {
+    chars: Peekable<Enumerate<Chars<'a>>>
 }
 
-impl<'a> TokenStream<'a>{
-    pub fn new(str: &'a String) -> TokenStream<'a>{
+impl TokenStream<'_> {
+    pub fn new<'a>(str: &'a String) -> TokenStream<'a> {
         TokenStream{
-            chars: str.chars().peekable()
+            chars: str.chars().enumerate().peekable()
         }
+    }
+    
+    pub fn pos(&mut self) -> Option<usize> {
+        Some(self.chars.peek()?.0)
     }
 }
 
-impl<'a> Iterator for TokenStream<'a>{
-    type Item = Token;
+impl Iterator for TokenStream<'_>{
+    type Item = (usize, Token); // 第一分量为该token对应到input的位置
     
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             return match self.chars.peek() {
-                Some(c) => match c{
+                Some((_, c)) => match c{
                     ' ' | '\t' | '\n' => {
                         self.chars.next();
                         continue
                     }
                     
-                    '+' => {
-                        self.chars.next();
-                        Some(Token::Op(Op::Add))
-                    }
+                    '+' => Some((self.chars.next()?.0, Token::Op(Op::Add))),
                     '-' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('>') => {
+                            Some((_, '>')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::To))
+                                Some((p, Token::Op(Op::To)))
                             }
-                            _ => Some(Token::Op(Op::Minus))
+                            _ => Some((p, Token::Op(Op::Minus)))
                         }
                     }
-                    '*' => {
-                        self.chars.next();
-                        Some(Token::Op(Op::Mult))
-                    }
-                    '/' => {
-                        self.chars.next();
-                        Some(Token::Op(Op::Divide))
-                    }
+                    '*' => Some((self.chars.next()?.0, Token::Op(Op::Mult))),
+                    '/' => Some((self.chars.next()?.0, Token::Op(Op::Divide))),
                     '<' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('=') => {
+                            Some((_, '=')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::LessEq))
+                                Some((p, Token::Op(Op::LessEq)))
                             }
-                            _ => Some(Token::Op(Op::Less))
+                            _ => Some((p, Token::Op(Op::Less)))
                         }
                     }
                     '>' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('=') => {
+                            Some((_, '=')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::GreEq))
+                                Some((p, Token::Op(Op::GreEq)))
                             }
-                            _ => Some(Token::Op(Op::Gre))
+                            _ => Some((p, Token::Op(Op::Gre)))
                         }
                     }
                     '=' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('=') => {
+                            Some((_, '=')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::Eq))
+                                Some((p, Token::Op(Op::Eq)))
                             }
-                            _ => Some(Token::Symbol('='))
+                            _ => Some((p, Token::Symbol('=')))
                         }
                     }
                     '&' => {
-                        self.chars.next();
-                        if self.chars.next() != Some('&') {
-                            println!("lexer: expected &&, but found single &");
-                            None
+                        let p = self.chars.next()?.0;
+                        if let Some((_, '&')) = self.chars.next() {
+                            Some((p, Token::Op(Op::And)))
                         } else {
-                            Some(Token::Op(Op::And))
+                            eprintln!("lexer: expected &&, but found single &");
+                            Some((p, Token::Err))
                         }
                     }
                     '|' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('|') => {
+                            Some((_, '|')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::Or))
+                                Some((p, Token::Op(Op::Or)))
                             }
-                            _ => Some(Token::Symbol('|'))
+                            _ => Some((p, Token::Symbol('|')))
                         }
                     }
                     '!' => {
-                        self.chars.next();
+                        let p = self.chars.next()?.0;
                         match self.chars.peek() {
-                            Some('=') => {
+                            Some((_, '=')) => {
                                 self.chars.next();
-                                Some(Token::Op(Op::NotEq))
+                                Some((p, Token::Op(Op::NotEq)))
                             }
-                            _ => Some(Token::Op(Op::Not))
+                            _ => Some((p, Token::Op(Op::Not)))
                         }
                     }
-                    '\\' => {
-                        self.chars.next();
-                        Some(Token::Op(Op::Lambda))
-                    }
+                    '\\' => Some((self.next()?.0, Token::Op(Op::Lambda))),
                     
-                    '[' | ']' | '(' | ')' | ':' | ',' | '.' => Some(Token::Symbol(self.chars.next().unwrap())),
+                    '[' | ']' | '(' | ')' | ':' | ',' | '.' => {
+                        let (p, c) = self.chars.next()?;
+                        Some((p, Token::Symbol(c)))
+                    }
                     'a'..='z' | 'A'..='Z' | '_' => {
-                        let s: String = self.chars.by_ref().peeking_take_while(
-                            |c|{('a'..='z').contains(c) || ('A'..='Z').contains(c) || ('0'..'9').contains(c) || *c == '_'}
-                        ).collect();
-                        match &s[..] {
-                            "lambda" => Some(Token::Op(Op::Lambda)),
-                            "let" | "fix" | "Int" | "Bool" => Some(Token::KeyWord(s)),
-                            "true" => Some(Token::Bool(true)),
-                            "false" => Some(Token::Bool(false)),
-                            _ => Some(Token::Identifier(s))
-                        }
+                        let p = self.chars.peek()?.0;
+                        let s: String = self.chars.by_ref().peeking_take_while(|x|{
+                            let ref c = x.1;
+                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || ('0'..'9').contains(c) || *c == '_'
+                        }).map(|x|{x.1}).collect();
+                        Some((p, match &s[..] {
+                            "lambda" => Token::Op(Op::Lambda),
+                            "let" | "fix" | "if" | "then" | "else" => Token::KeyWord(s),
+                            "true" => Token::Bool(true),
+                            "false" => Token::Bool(false),
+                            _ => Token::Identifier(s),
+                        }))
                     }
                     '0'..='9' => {
-                        Some(Token::Int(self.chars.by_ref().peeking_take_while(|c|{('0'..='9').contains(c)}).collect::<String>().parse::<i32>().unwrap()))
+                        Some((self.chars.peek()?.0, Token::Int(self.chars.by_ref().peeking_take_while(|x|{
+                            let ref c = x.1;
+                            ('0'..='9').contains(c)
+                        }).map(|x|{x.1}).collect::<String>().parse::<i32>().unwrap())))
                     }
                     ';' => None,
                     _ => {
-                        println!("lexer: unrecognized char {}", c);
-                        None
+                        eprintln!("lexer: unrecognized char {}", c);
+                        Some((self.chars.peek()?.0, Token::Err))
                     }
                 }
                 None => None
