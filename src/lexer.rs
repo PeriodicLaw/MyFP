@@ -11,9 +11,17 @@ pub enum Op {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum KeyWord {
+    Int, Bool,
+    If, Then, Else,
+    Union, Case, Of,
+    Fix, Let
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Identifier(String),
-    KeyWord(String),
+    KeyWord(KeyWord),
     Symbol(char), // ( ) [ ] = : , |
     Op(Op),
     Int(i32),
@@ -29,10 +37,6 @@ impl TokenStream<'_> {
         TokenStream{
             chars: str.chars().enumerate().peekable()
         }
-    }
-    
-    pub fn pos(&mut self) -> Option<usize> {
-        Some(self.chars.peek()?.0)
     }
 }
 
@@ -134,7 +138,16 @@ impl Iterator for TokenStream<'_>{
                         }).map(|x|{x.1}).collect();
                         Some((p, match &s[..] {
                             "lambda" => Token::Op(Op::Lambda),
-                            "let" | "fix" | "if" | "then" | "else" => Token::KeyWord(s),
+                            "Int" => Token::KeyWord(KeyWord::Int),
+                            "Bool" => Token::KeyWord(KeyWord::Bool),
+                            "if" => Token::KeyWord(KeyWord::If),
+                            "then" => Token::KeyWord(KeyWord::Then),
+                            "else" => Token::KeyWord(KeyWord::Else),
+                            "union" => Token::KeyWord(KeyWord::Union),
+                            "case" => Token::KeyWord(KeyWord::Case),
+                            "of" => Token::KeyWord(KeyWord::Of),
+                            "fix" => Token::KeyWord(KeyWord::Fix),
+                            "let" => Token::KeyWord(KeyWord::Let),
                             "true" => Token::Bool(true),
                             "false" => Token::Bool(false),
                             _ => Token::Identifier(s),

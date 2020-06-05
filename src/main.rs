@@ -14,8 +14,8 @@ fn main() -> io::Result<()> {
             interface.add_history_unique(line.clone());
         }
         
+        input.push_str(&line[..]);
         if line.trim().ends_with(';') {
-            input.push_str(&line[..]);
             let mut parser = parser::Parser::new(&input);
             match parser.parse() {
                 Ok(ast) => println!("{:?}", ast),
@@ -34,7 +34,6 @@ fn main() -> io::Result<()> {
             input.clear();
             interface.set_prompt("> ")?;
         } else {
-            input.push_str(&line[..]);
             input.push(' '); // 对于换行，我们手动给两行之间加上空格
             interface.set_prompt("  ")?;
         }
