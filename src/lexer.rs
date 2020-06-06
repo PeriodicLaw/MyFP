@@ -1,6 +1,6 @@
 use std::str::Chars;
 use std::iter::{Enumerate, Peekable};
-use peeking_take_while::PeekableExt;
+use itertools::Itertools;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Op {
@@ -24,24 +24,27 @@ impl Op {
         }
     }
     
-    // pub fn is_binop(&self) -> bool {
-    //     match self {
-    //         Op::Add | Op::Minus | Op::Mult | Op::Divide | Op::And | Op::Or | Op::Cons |
-    //             Op::Eq | Op::NotEq |  => true,
-    //         _ => false
-    //     }
-    // }
-    
-    // pub fn is_greater_or_eq(&self, other: &Op) -> bool {
-    //     match other {
-    //         Op::Or => true,
-    //         Op::And => (*self != Op::Or),
-    //         Op::Cons => (*self != Op::Or && *self != Op::And),
-    //         Op::Add | Op::Minus => (*self != Op::Or && *self != Op::And && *self != Op::Cons),
-    //         Op::Mult | Op::Divide => (*self == Op::Mult || *self == Op::Divide),
-    //         _ => false
-    //     }
-    // }
+    pub fn to_str(&self) -> &str {
+        match self {
+            Op::Add => "+",
+            Op::Minus => "-",
+            Op::Mult => "*",
+            Op::Divide => "/",
+            Op::Eq => "==",
+            Op::NotEq => "!=",
+            Op::Less => "<",
+            Op::LessEq => "<=",
+            Op::Gre => ">",
+            Op::GreEq => ">=",
+            Op::And => "&&",
+            Op::Or => "||",
+            Op::Not => "!",
+            Op::Cons => "++",
+            Op::Lambda => "λ",
+            Op::To => "->",
+            Op::CaseTo => "=>"
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

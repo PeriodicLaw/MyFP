@@ -1,5 +1,8 @@
+#![feature(box_patterns)]
 mod lexer;
+mod ast;
 mod parser;
+
 use std::io;
 use linefeed::{Interface, ReadResult};
 
@@ -18,7 +21,7 @@ fn main() -> io::Result<()> {
         if line.trim().ends_with(';') {
             let mut parser = parser::Parser::new(&input);
             match parser.parse() {
-                Ok(ast) => println!("{:?}", ast),
+                Ok(ast) => println!("{}", ast),
                 Err(pos) => {
                     let pos = match pos {
                         Some(pos) => pos,

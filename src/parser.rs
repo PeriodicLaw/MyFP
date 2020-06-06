@@ -1,43 +1,6 @@
 use crate::lexer::{Op, KeyWord, Token, TokenStream};
+use crate::ast::{Type, Expr, AST};
 use std::iter::Peekable;
-
-#[derive(Debug)]
-pub enum Type {
-	Int, Bool,
-	Func(Box<Type>, Box<Type>),
-	Tuple(Vec<Type>),
-	Union(Vec<Type>),
-	List(Box<Type>)
-}
-
-#[derive(Debug)]
-pub enum Expr {
-	Lambda(String, Type, Box<Expr>),
-	Apply(Box<Expr>, Box<Expr>),
-	Fix(Box<Expr>),
-	
-	UnaryOp(Op, Box<Expr>),
-	BinOp(Op, Box<Expr>, Box<Expr>),
-	Tuple(Vec<Expr>),
-	TupleIndex(Box<Expr>, i32),
-	Union(Vec<(Type, Option<Expr>)>),
-	CaseOf(Box<Expr>, Vec<(Type, String, Expr)>),
-	List(Vec<Expr>),
-	Nil(Box<Expr>),
-	Head(Box<Expr>),
-	Tail(Box<Expr>),
-	IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
-	
-	Identifier(String),
-	Int(i32),
-	Bool(bool)
-}
-
-#[derive(Debug)]
-pub enum AST {
-	Let(String, Type, Expr),
-	Expr(Expr)
-}
 
 pub struct Parser<'a> {
 	lexer: Peekable<TokenStream<'a>>
@@ -302,6 +265,10 @@ impl Parser<'_> {
 			}
 			Some((_, Token::Symbol('['))) => {
 				self.consume();
+				if let Some((_, Token::Symbol(']'))) = self.peek() {
+					self.consume();
+					return Ok(Expr::List(vec![]));
+				}
 				let mut exprs = vec![self.parse_expr()?];
 				while let Some((_, Token::Symbol(','))) = self.peek() {
 					self.consume();
@@ -371,12 +338,12 @@ impl Parser<'_> {
 			
 			Some((_, Token::KeyWord(KeyWord::If))) => {
 				self.consume();
-				let expr0 = self.parse_expr()?;
+				let cond = self.parse_expr()?;
 				self.expect(Token::KeyWord(KeyWord::Then))?;
-				let expr1 = self.parse_expr()?;
+				let expr0 = self.parse_expr()?;
 				self.expect(Token::KeyWord(KeyWord::Else))?;
-				let expr2 = self.parse_expr()?;
-				Ok(Expr::IfThenElse(Box::new(expr0), Box::new(expr1), Box::new(expr2)))
+				let expr1 = self.parse_expr()?;
+				Ok(Expr::IfThenElse(Box::new(cond), Box::new(expr0), Box::new(expr1)))
 			}
 			
 			Some((_, Token::Op(Op::Lambda))) => {
@@ -389,7 +356,7 @@ impl Parser<'_> {
 			}
 			
 			x => {
-				eprintln!("parser: expected an expression");
+				eprintln!("parser: expected an expression without prefix and suffix");
 				Err(x.map(|x|{x.0}))
 			}
 		}
