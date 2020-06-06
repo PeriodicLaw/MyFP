@@ -7,7 +7,41 @@ pub enum Op {
     Add, Minus, Mult, Divide, // + - * /
     Eq, NotEq, Less, LessEq, Gre, GreEq, // == != < <= > >=
     And, Or, Not, // && || !
-    Lambda, To // \ ->
+    Cons, // ++
+    Lambda, To, CaseTo // \ -> =>
+}
+
+impl Op {
+    pub fn prior(&self) -> Option<i32> {
+        match self {
+            Op::Or => Some(0),
+            Op::And => Some(1),
+            Op::Eq | Op::NotEq | Op::Less | Op::LessEq | Op::Gre | Op::GreEq => Some(2),
+            Op::Cons => Some(3),
+            Op::Add | Op::Minus => Some(4),
+            Op::Mult | Op::Divide => Some(5),
+            _ => None
+        }
+    }
+    
+    // pub fn is_binop(&self) -> bool {
+    //     match self {
+    //         Op::Add | Op::Minus | Op::Mult | Op::Divide | Op::And | Op::Or | Op::Cons |
+    //             Op::Eq | Op::NotEq |  => true,
+    //         _ => false
+    //     }
+    // }
+    
+    // pub fn is_greater_or_eq(&self, other: &Op) -> bool {
+    //     match other {
+    //         Op::Or => true,
+    //         Op::And => (*self != Op::Or),
+    //         Op::Cons => (*self != Op::Or && *self != Op::And),
+    //         Op::Add | Op::Minus => (*self != Op::Or && *self != Op::And && *self != Op::Cons),
+    //         Op::Mult | Op::Divide => (*self == Op::Mult || *self == Op::Divide),
+    //         _ => false
+    //     }
+    // }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -15,6 +49,7 @@ pub enum KeyWord {
     Int, Bool,
     If, Then, Else,
     Union, Case, Of,
+    Nil, Head, Tail,
     Fix, Let
 }
 
@@ -52,7 +87,16 @@ impl Iterator for TokenStream<'_>{
                         continue
                     }
                     
-                    '+' => Some((self.chars.next()?.0, Token::Op(Op::Add))),
+                    '+' => {
+                        let p = self.chars.next()?.0;
+                        match self.chars.peek() {
+                            Some((_, '+')) => {
+                                self.chars.next();
+                                Some((p, Token::Op(Op::Cons)))
+                            }
+                            _ => Some((p, Token::Op(Op::Add)))
+                        }
+                    }
                     '-' => {
                         let p = self.chars.next()?.0;
                         match self.chars.peek() {
@@ -92,6 +136,10 @@ impl Iterator for TokenStream<'_>{
                                 self.chars.next();
                                 Some((p, Token::Op(Op::Eq)))
                             }
+                            Some((_, '>')) => {
+                                self.chars.next();
+                                Some((p, Token::Op(Op::CaseTo)))
+                            }
                             _ => Some((p, Token::Symbol('=')))
                         }
                     }
@@ -124,7 +172,7 @@ impl Iterator for TokenStream<'_>{
                             _ => Some((p, Token::Op(Op::Not)))
                         }
                     }
-                    '\\' => Some((self.next()?.0, Token::Op(Op::Lambda))),
+                    '\\' => Some((self.chars.next()?.0, Token::Op(Op::Lambda))),
                     
                     '[' | ']' | '(' | ')' | ':' | ',' | '.' => {
                         let (p, c) = self.chars.next()?;
@@ -146,6 +194,9 @@ impl Iterator for TokenStream<'_>{
                             "union" => Token::KeyWord(KeyWord::Union),
                             "case" => Token::KeyWord(KeyWord::Case),
                             "of" => Token::KeyWord(KeyWord::Of),
+                            "nil" => Token::KeyWord(KeyWord::Nil),
+                            "head" => Token::KeyWord(KeyWord::Head),
+                            "tail" => Token::KeyWord(KeyWord::Tail),
                             "fix" => Token::KeyWord(KeyWord::Fix),
                             "let" => Token::KeyWord(KeyWord::Let),
                             "true" => Token::Bool(true),
@@ -159,7 +210,7 @@ impl Iterator for TokenStream<'_>{
                             ('0'..='9').contains(c)
                         }).map(|x|{x.1}).collect::<String>().parse::<i32>().unwrap())))
                     }
-                    ';' => Some((self.chars.peek()?.0, Token::End)),
+                    ';' => Some((self.chars.next()?.0, Token::End)),
                     _ => {
                         eprintln!("lexer: unrecognized char {}", c);
                         Some((self.chars.peek()?.0, Token::Err))

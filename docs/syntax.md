@@ -15,20 +15,25 @@ T :=
 ```
 E :=
 	int | bool | (E)
-	op E | E op E |						// 一元运算 + - !；二元运算 + - * / && ||
+	op E | E op E |								// 一元运算 + - !；二元运算 + - * / && || ++
 	if E then E else E |
 
-	() | (E,) | (E, ..., E)				// 元组构造
-	E.int								// 元组解开，下标必须是整数字面值
-	union (T | ... | T E | ... | T)		// union构造，要恰好其中一项有值
-	case E of (id:T E | ... | id:T E)	// union解开
-	[E, ..., E]							// 列表构造
-	E[E]								// 列表索引
+	() | (E,) | (E, ..., E) |					// 元组构造
+	E.int |										// 元组解开，下标必须是整数字面值
+	union (T | ... | T E | ... | T) |			// union构造，要恰好其中一项有值
+	case E of (T id => E | ... | T id => E) |	// union解开
+	[E, ..., E] |								// 列表构造
+	nil E | head E | tail E |
 
-	lambda id:T to E |					// lambda表达式
-	E E									// 函数调用
+	lambda id:T E |								// lambda表达式
+	E E |										// 函数调用
 	fix E
 ```
+
+优先级：`||` < `&&` < 比较运算 < `++` < 二元`+ -` < `* /` < 一元`+ -` = `! nil head tail fix` < 函数调用 < '.' < 关键字、括号、元组、列表
+
+二元运算全部左结合。
+函数调用的优先级比一元运算高是为了方便`-f(x)`的解析，但这样`f fix g`就无法解析，我选择前者。
 
 语句：
 
