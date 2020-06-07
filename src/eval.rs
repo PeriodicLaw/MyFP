@@ -1,7 +1,8 @@
 use crate::ast::{BinOp, Context, Expr, UnaryOp};
 
 impl Expr {
-	pub fn eval(self, context: &mut Context) -> Result<Self, ()> {
+	/// 化简求值，按照惰性求值的原则将表达式尽可能化简
+	pub fn eval(self, context: &Context) -> Result<Self, ()> {
 		match self {
 			Expr::Lambda(_, _, _) => Ok(self), // 惰性求值
 			Expr::Apply(expr0, expr1) => {
@@ -51,7 +52,7 @@ impl Expr {
 				let expr0 = expr0.eval(context)?;
 				let expr1 = expr1.eval(context)?;
 				match op {
-					BinOp::Add | BinOp::Minus | BinOp::Mult | BinOp::Divide =>
+					BinOp::Add | BinOp::Minus | BinOp::Mult | BinOp::Divide => {
 						if let Expr::Int(x0) = expr0 {
 							if let Expr::Int(x1) = expr1 {
 								match op {
@@ -76,7 +77,8 @@ impl Expr {
 							eprintln!("evaler: unable to eval '{}'", expr0);
 							Err(())
 						}
-					BinOp::And | BinOp::Or =>
+					}
+					BinOp::And | BinOp::Or => {
 						if let Expr::Bool(x0) = expr0 {
 							if let Expr::Bool(x1) = expr1 {
 								match op {
@@ -92,12 +94,13 @@ impl Expr {
 							eprintln!("evaler: unable to eval '{}'", expr0);
 							Err(())
 						}
+					}
 					BinOp::Eq
 					| BinOp::NotEq
 					| BinOp::Less
 					| BinOp::LessEq
 					| BinOp::Gre
-					| BinOp::GreEq =>
+					| BinOp::GreEq => {
 						if let Expr::Int(x0) = expr0 {
 							if let Expr::Int(x1) = expr1 {
 								match op {
@@ -117,7 +120,8 @@ impl Expr {
 							eprintln!("evaler: unable to eval '{}'", expr0);
 							Err(())
 						}
-					BinOp::Cons =>
+					}
+					BinOp::Cons => {
 						if let Expr::List(mut exprs0) = expr0 {
 							if let Expr::List(mut exprs1) = expr1 {
 								exprs0.append(&mut exprs1);
@@ -130,6 +134,7 @@ impl Expr {
 							eprintln!("evaler: unable to eval '{}'", expr0);
 							Err(())
 						}
+					}
 				}
 			}
 			Expr::Tuple(exprs) => {
@@ -144,7 +149,10 @@ impl Expr {
 				if let Expr::Tuple(exprs) = expr {
 					Ok(exprs[index].clone())
 				} else {
-					eprintln!("evaler: unable to eval '{}'", Expr::TupleIndex(Box::new(expr), index));
+					eprintln!(
+						"evaler: unable to eval '{}'",
+						Expr::TupleIndex(Box::new(expr), index)
+					);
 					Err(())
 				}
 			}
@@ -169,7 +177,10 @@ impl Expr {
 					}
 					unreachable!()
 				} else {
-					eprintln!("evaler: unable to eval '{}'", Expr::CaseOf(Box::new(expr), cases));
+					eprintln!(
+						"evaler: unable to eval '{}'",
+						Expr::CaseOf(Box::new(expr), cases)
+					);
 					Err(())
 				}
 			}
@@ -237,7 +248,7 @@ impl Expr {
 		}
 	}
 
-	// 将某一标识符所有自由出现的地方，全部替换为某个表达式
+	/// 替换，将某一标识符所有自由出现的地方，全部替换为某个表达式
 	fn subst(self, idsub: &String, exprsub: &Expr) -> Self {
 		match self {
 			Expr::Lambda(id, ty, expr) => {
@@ -308,23 +319,3 @@ impl Expr {
 		}
 	}
 }
-
-// match self {
-// 	Expr::Lambda(id, ty, expr) => {}
-// 	Expr::Apply(expr0, expr1) => {}
-// 	Expr::Fix(expr) => {}
-// 	Expr::UnaryOp(op, expr) => {}
-// 	Expr::BinOp(op, expr0, expr1) => {}
-// 	Expr::Tuple(exprs) => {}
-// 	Expr::TupleIndex(expr, index) => {}
-// 	Expr::Union(unions) => {}
-// 	Expr::CaseOf(expr, cases) => {}
-// 	Expr::List(exprs) => {}
-// 	Expr::Nil(expr) => {}
-// 	Expr::Head(expr) => {}
-// 	Expr::Tail(expr) => {}
-// 	Expr::IfThenElse(cond, expr0, expr1) => {}
-// 	Expr::Identifier(id) => {}
-// 	Expr::Int(x) => {}
-// 	Expr::Bool(x) => {}
-// }

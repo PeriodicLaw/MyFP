@@ -1,6 +1,7 @@
 use crate::ast::{BinOp, Context, Expr, Type, UnaryOp, AST};
 
 impl Expr {
+	/// 类型检查，推断出表达式的类型
 	fn typecheck(&self, context: &mut Context) -> Result<Type, ()> {
 		match self {
 			Expr::Lambda(id, ty0, expr) => {

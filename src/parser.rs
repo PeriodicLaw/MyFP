@@ -13,6 +13,7 @@ impl Parser<'_> {
 		}
 	}
 
+	/// 解析Token流为AST
 	pub fn parse(&mut self) -> Result<AST, Option<usize>> {
 		match self.peek() {
 			Some((_, Token::KeyWord(KeyWord::Let))) => {
@@ -386,7 +387,7 @@ impl Parser<'_> {
 		}
 	}
 
-	// 用于简化词法处理的函数
+	// 一些用于简化词法处理的函数
 	fn consume(&mut self) {
 		self.lexer.next();
 	}
