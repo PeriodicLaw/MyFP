@@ -64,10 +64,10 @@ impl Display for Type {
             Type::Int => write!(f, "Int"),
             Type::Bool => write!(f, "Bool"),
             Type::Func(x, y) => {
-                if let Type::Func(_, _) = **y {
-                    write!(f, "{}->({})", x, y)
+                if let Type::Func(_, _) = **x {
+                    write!(f, "({}) → {}", x, y)
                 } else {
-                    write!(f, "{}->{}", x, y)
+                    write!(f, "{} → {}", x, y)
                 }
             }
             Type::Tuple(tys) => fmt_tuple(f, tys, |f, ty| write!(f, "{}", ty)),
@@ -169,7 +169,7 @@ impl Display for Expr {
             Expr::CaseOf(expr, cases) => {
                 write!(f, "case {} of ", expr)?;
                 fmt_list(f, cases, "(", ")", "| ", |f, x| {
-                    write!(f, "{} {} => {}", x.0, x.1, x.2)
+                    write!(f, "{} {} ⇒ {}", x.0, x.1, x.2)
                 })
             }
             Expr::List(exprs) => {
@@ -179,7 +179,7 @@ impl Display for Expr {
             Expr::Head(expr) => write!(f, "head ({})", expr),
             Expr::Tail(expr) => write!(f, "tail ({})", expr),
             Expr::IfThenElse(cond, expr0, expr1) => {
-                write!(f, "(if {} then {} else {})", cond, expr0, expr1)
+                write!(f, "if {} then {} else {}", cond, expr0, expr1)
             }
             Expr::Identifier(id) => write!(f, "{}", id),
             Expr::Int(x) => write!(f, "{}", x),
