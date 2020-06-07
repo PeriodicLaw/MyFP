@@ -1,6 +1,7 @@
 #![feature(box_patterns)]
 
 mod ast;
+mod eval;
 mod lexer;
 mod parser;
 mod typecheck;
@@ -8,7 +9,7 @@ mod typecheck;
 use linefeed::{Interface, ReadResult};
 use std::io;
 
-use ast::{Context, AST};
+use crate::ast::{Context, AST};
 
 fn main() -> io::Result<()> {
 	let interface = Interface::new("MyFP")?;
@@ -27,17 +28,26 @@ fn main() -> io::Result<()> {
 		if line.trim().ends_with(';') {
 			let mut parser = parser::Parser::new(&input);
 			match parser.parse() {
+				// 语法分析
 				Ok(ast) => {
 					match ast.typecheck(&mut context) {
+						// 类型检查
 						Ok(ty) => match ast {
 							AST::Let(id, _, expr) => {
-								// let语句，需要将该变量加入上下文
-								println!("{}:{}", id, ty);
-								println!("{} = {}", id, expr);
-								context.add(id, ty, expr);
+								if let Ok(expr) = expr.eval(&mut context) {
+									// 求值化简
+									// let语句，需要将该变量加入上下文
+									println!("{} : {}", id, ty);
+									println!("{} = {}", id, expr);
+									context.add(id, ty, expr);
+								}
 							}
 							AST::Expr(expr) => {
-								println!("{} : {}", expr, ty);
+								if let Ok(expr) = expr.eval(&mut context) {
+									// 求值化简
+									// 匿名表达式
+									println!("{} : {}", expr, ty);
+								}
 							}
 						},
 						Err(()) => {}
@@ -56,6 +66,7 @@ fn main() -> io::Result<()> {
 				}
 			}
 			context.pop_all(); // 由于类型检查中可能出现错误，需要手动把此时出现的局部上下文清空
+			println!("");
 			input.clear();
 			interface.set_prompt("> ")?;
 		} else {
