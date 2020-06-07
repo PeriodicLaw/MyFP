@@ -62,7 +62,7 @@ impl Expr {
 				let ty1 = expr1.typecheck(context)?;
 				match op {
 					BinOp::Add | BinOp::Minus | BinOp::Mult | BinOp::Divide => {
-						if ty0 == Type::Int && ty0 == Type::Int {
+						if ty0 == Type::Int && ty1 == Type::Int {
 							Ok(Type::Int)
 						} else {
 							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both integer", expr0, ty0, expr1, ty1);
@@ -75,12 +75,10 @@ impl Expr {
 					| BinOp::LessEq
 					| BinOp::Gre
 					| BinOp::GreEq => {
-						if (ty0 == Type::Int && ty1 == Type::Int)
-							|| (ty0 == Type::Bool && ty1 == Type::Bool)
-						{
+						if ty0 == Type::Int && ty1 == Type::Int {
 							Ok(Type::Bool)
 						} else {
-							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both integer or both boolean", expr0, ty0, expr1, ty1);
+							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both integer", expr0, ty0, expr1, ty1);
 							Err(())
 						}
 					}

@@ -172,7 +172,7 @@ impl Op {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
 	Lambda(String, Type, Box<Expr>),
 	Apply(Box<Expr>, Box<Expr>),
