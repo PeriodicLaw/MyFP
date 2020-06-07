@@ -39,5 +39,5 @@ E :=
 
 ```
 S :=
-	let id:T = E
+	let id = E | let id: T = E | E
 ```
