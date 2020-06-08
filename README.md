@@ -36,5 +36,5 @@ curry = λf:(α, β) → γ. λx:α. λy:β. f (x, y)
 
 > let uncurry = \f \x:(_,_) f x.0 x.1;
 uncurry : ∀ α ∀ β ∀ γ (α → β → γ) → (α, β) → γ
-uncurry = λf:α → β → γ. λx:(α, β). (f x.0) x.1
+uncurry = λf:α → β → γ. λx:(α, β). f x.0 x.1
 ```

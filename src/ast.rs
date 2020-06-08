@@ -217,7 +217,6 @@ impl Display for Expr {
 				match expr0 {
 					box Expr::BinOp(_, _, _)
 					| box Expr::UnaryOp(_, _)
-					| box Expr::Apply(_, _)
 					| box Expr::Lambda(_, _, _) => write!(f, "({})", expr0)?,
 					_ => write!(f, "{}", expr0)?,
 				}
@@ -225,6 +224,7 @@ impl Display for Expr {
 				match expr1 {
 					box Expr::BinOp(_, _, _)
 					| box Expr::UnaryOp(_, _)
+					| box Expr::Apply(_, _)
 					| box Expr::Lambda(_, _, _) => write!(f, "({})", expr1),
 					_ => write!(f, "{}", expr1),
 				}
