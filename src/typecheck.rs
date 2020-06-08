@@ -328,7 +328,7 @@ impl Expr {
 					ct.pop();
 				}
 				let _ty = expr.typecheck(ct, tyct)?;
-				if !unify(tyct, &ty, &_ty) {
+				if !unify(tyct, &_ty, &Type::Union(tycs)) {
 					eprintln!("type checker: unifing because '{}' defined after case should have the same type as types in cases", expr);
 					return Err(());
 				}

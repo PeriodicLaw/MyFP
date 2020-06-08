@@ -7,7 +7,7 @@
 - [x] 词法和语法分析
 - [x] 类型检查与惰性求值
 - [x] HM类型系统及类型推导
-- [ ] 库函数
+- [ ] 实现Monad
 
 ## 效果
 
@@ -34,10 +34,14 @@ uncurry : ∀ α ∀ β ∀ γ (α → β → γ) → (α, β) → γ
 uncurry = λf:α → β → γ. λx:(α, β). f x.0 x.1
 
 > let combine = \f1 \f2 \x case x of (_ a => f1 a | _ b => f2 b);
-combine : ∀ α ∀ β ∀ γ (β → α) → (γ → α) → α → α
-combine = λf1:β → α. λf2:γ → α. λx:α. case x of (β a ⇒ f1 a | γ b ⇒ f2 b)
+combine : ∀ α ∀ β ∀ γ (α → γ) → (β → γ) → (α | β) → γ
+combine = λf1:α → γ. λf2:β → γ. λx:(α | β). case x of (α a ⇒ f1 a | β b ⇒ f2 b)
 
 > let diverse = \f (\x f union(_ x|_), \y f union(_|_ y));
 diverse : ∀ α ∀ β ∀ γ ((β | α) → γ) → (β → γ, α → γ)
 diverse = λf:(β | α) → γ. (λx:β. f union (β x | α), λy:α. f union (β | α y))
 ```
+
+## 文档
+
+[语法设计文档](docs/syntax.md)
