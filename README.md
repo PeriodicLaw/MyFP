@@ -16,17 +16,12 @@
 fact : Int → Int
 fact = fix (λf:Int → Int. λx:Int. if x == 0 then 1 else (f (x - 1)) * x)
 
-> fact 5;
-120 :  Int
-```
+> let map = fix \map \f \l match l of ([] => [] | x::xs => (f x)::(map f xs));
+map : ∀ α ∀ β (α → β) → [α] → [β]
+map = fix (λmap:(α → β) → [α] → [β]. λf:α → β. λl:[α]. match l of ([] ⇒ [] | x::xs ⇒ (f x) :: (map f xs)))
 
-```
-> let map = fix \map \f \l if nil l then [] else [f (head l)] ++ map f (tail l);
-map : ∀ α ∀ β (β → α) → [β] → [α]
-map = fix (λmap:(β → α) → [β] → [α]. λf:β → α. λl:[β]. if nil (l) then [] else [f head (l)] ++ ((map f) tail (l)))
-
-> map fact [1,2,3,4,5];
-[1, 2, 6, 24, 120] :  [Int]
+> map fact [0,1,2,3,4,5];
+[1, 1, 2, 6, 24, 120] : [Int]
 ```
 
 ```
@@ -37,4 +32,12 @@ curry = λf:(α, β) → γ. λx:α. λy:β. f (x, y)
 > let uncurry = \f \x:(_,_) f x.0 x.1;
 uncurry : ∀ α ∀ β ∀ γ (α → β → γ) → (α, β) → γ
 uncurry = λf:α → β → γ. λx:(α, β). f x.0 x.1
+
+> let combine = \f1 \f2 \x case x of (_ a => f1 a | _ b => f2 b);
+combine : ∀ α ∀ β ∀ γ (β → α) → (γ → α) → α → α
+combine = λf1:β → α. λf2:γ → α. λx:α. case x of (β a ⇒ f1 a | γ b ⇒ f2 b)
+
+> let diverse = \f (\x f union(_ x|_), \y f union(_|_ y));
+diverse : ∀ α ∀ β ∀ γ ((β | α) → γ) → (β → γ, α → γ)
+diverse = λf:(β | α) → γ. (λx:β. f union (β x | α), λy:α. f union (β | α y))
 ```

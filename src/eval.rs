@@ -1,8 +1,9 @@
-use crate::ast::{BinOp, Context, Expr, UnaryOp};
+use crate::ast::{BinOp, Expr, UnaryOp};
+use crate::context::VarContext;
 
 impl Expr {
 	/// 化简求值，按照惰性求值的原则将表达式尽可能化简
-	pub fn eval(self, ct: &Context) -> Result<Self, ()> {
+	pub fn eval(self, ct: &VarContext) -> Result<Self, ()> {
 		match self {
 			Expr::Lambda(_, _, _) => Ok(self), // 惰性求值
 			Expr::Apply(expr0, expr1) => {
@@ -209,46 +210,13 @@ impl Expr {
 						let mut it = exprs.into_iter();
 						let head = it.next().unwrap();
 						let tail = Expr::List(it.collect());
-						Ok(expr2.subst(&id0, &head).subst(&id1, &tail))
+						expr2.subst(&id0, &head).subst(&id1, &tail).eval(ct)
 					}
 				} else {
 					eprintln!("evaler: unable to eval '{}'", expr0);
 					Err(())
 				}
 			}
-			// Expr::Nil(expr) => {
-			// 	let expr = expr.eval(ct)?;
-			// 	if let Expr::List(exprs) = expr {
-			// 		Ok(Expr::Bool(exprs.is_empty()))
-			// 	} else {
-			// 		eprintln!("evaler: unable to eval '{}'", Expr::Nil(Box::new(expr)));
-			// 		Err(())
-			// 	}
-			// }
-			// Expr::Head(expr) => {
-			// 	let expr = expr.eval(ct)?;
-			// 	if let Expr::List(exprs) = expr {
-			// 		match exprs.into_iter().next() {
-			// 			Some(expr) => Ok(expr),
-			// 			_ => {
-			// 				eprintln!("evaler: cannot get the head of nil");
-			// 				Err(())
-			// 			}
-			// 		}
-			// 	} else {
-			// 		eprintln!("evaler: unable to eval '{}'", Expr::Head(Box::new(expr)));
-			// 		Err(())
-			// 	}
-			// }
-			// Expr::Tail(expr) => {
-			// 	let expr = expr.eval(ct)?;
-			// 	if let Expr::List(exprs) = expr {
-			// 		Ok(Expr::List(exprs.into_iter().skip(1).collect()))
-			// 	} else {
-			// 		eprintln!("evaler: unable to eval '{}'", Expr::Tail(Box::new(expr)));
-			// 		Err(())
-			// 	}
-			// }
 			Expr::IfThenElse(cond, expr0, expr1) => {
 				if let Expr::Bool(x) = cond.eval(ct)? {
 					if x {
@@ -324,11 +292,20 @@ impl Expr {
 			Expr::List(exprs) => {
 				Expr::List(exprs.into_iter().map(|x| x.subst(idsub, exprsub)).collect())
 			}
-			Expr::MatchOf(expr0, expr1, id0, id1, expr2) =>
-				Expr::MatchOf(Box::new(expr0.subst(idsub, exprsub)), Box::new(expr1.subst(idsub, exprsub)), id0, id1, Box::new(expr2.subst(idsub, exprsub))),
-			// Expr::Nil(expr) => Expr::Nil(Box::new(expr.subst(idsub, exprsub))),
-			// Expr::Head(expr) => Expr::Head(Box::new(expr.subst(idsub, exprsub))),
-			// Expr::Tail(expr) => Expr::Tail(Box::new(expr.subst(idsub, exprsub))),
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) => {
+				let expr2 = if &id0 == idsub || &id1 == idsub {
+					expr2
+				} else {
+					Box::new(expr2.subst(idsub, exprsub))
+				};
+				Expr::MatchOf(
+					Box::new(expr0.subst(idsub, exprsub)),
+					Box::new(expr1.subst(idsub, exprsub)),
+					id0,
+					id1,
+					expr2,
+				)
+			}
 			Expr::IfThenElse(cond, expr0, expr1) => Expr::IfThenElse(
 				Box::new(cond.subst(idsub, exprsub)),
 				Box::new(expr0.subst(idsub, exprsub)),
