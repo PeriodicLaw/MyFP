@@ -124,6 +124,7 @@ pub enum BinOp {
 	And,
 	Or,
 	Cons,
+	Concat,
 }
 
 impl BinOp {
@@ -141,7 +142,8 @@ impl BinOp {
 			BinOp::GreEq => ">=",
 			BinOp::And => "&&",
 			BinOp::Or => "||",
-			BinOp::Cons => "++",
+			BinOp::Cons => "::",
+			BinOp::Concat => "++",
 		}
 	}
 
@@ -160,6 +162,7 @@ impl BinOp {
 			Op::And => Some(BinOp::And),
 			Op::Or => Some(BinOp::Or),
 			Op::Cons => Some(BinOp::Cons),
+			Op::Concat => Some(BinOp::Concat),
 			_ => None,
 		}
 	}
@@ -169,7 +172,7 @@ impl BinOp {
 			BinOp::Or => 0,
 			BinOp::And => 1,
 			BinOp::Eq | BinOp::NotEq | BinOp::Less | BinOp::LessEq | BinOp::Gre | BinOp::GreEq => 2,
-			BinOp::Cons => 3,
+			BinOp::Cons | BinOp::Concat => 3,
 			BinOp::Add | BinOp::Minus => 4,
 			BinOp::Mult | BinOp::Divide => 5,
 		}
@@ -199,9 +202,10 @@ pub enum Expr {
 	Union(Vec<(Type, Option<Expr>)>),
 	CaseOf(Box<Expr>, Vec<(Type, String, Expr)>),
 	List(Vec<Expr>),
-	Nil(Box<Expr>),
-	Head(Box<Expr>),
-	Tail(Box<Expr>),
+	MatchOf(Box<Expr>, Box<Expr>, String, String, Box<Expr>),
+	// Nil(Box<Expr>),
+	// Head(Box<Expr>),
+	// Tail(Box<Expr>),
 	IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
 
 	Identifier(String),
@@ -276,9 +280,11 @@ impl Display for Expr {
 			Expr::List(exprs) => {
 				fmt_list(f, exprs, "[", "]", ", ", |f, expr| write!(f, "{}", expr))
 			}
-			Expr::Nil(expr) => write!(f, "nil ({})", expr),
-			Expr::Head(expr) => write!(f, "head ({})", expr),
-			Expr::Tail(expr) => write!(f, "tail ({})", expr),
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) =>
+				write!(f, "match {} of ([] ⇒ {} | {}::{} ⇒ {})", expr0, expr1, id0, id1, expr2),
+			// Expr::Nil(expr) => write!(f, "nil ({})", expr),
+			// Expr::Head(expr) => write!(f, "head ({})", expr),
+			// Expr::Tail(expr) => write!(f, "tail ({})", expr),
 			Expr::IfThenElse(cond, expr0, expr1) => {
 				write!(f, "if {} then {} else {}", cond, expr0, expr1)
 			}
@@ -373,13 +379,13 @@ impl TypeContext {
 	/// 根据一个被调用函数的类型上下文，将其类型进行实例化
 	/// 通过替换该上下文中的自由变量，到一组新产生的自由变量，然后再将其类型简化得到
 	/// 由于被调用函数一定是经过参数重命名和简化后的表达式，所以不会有变量名的冲突
-	pub fn instant(&mut self, mut tyct: TypeContext, ty: Type) -> Type {
+	pub fn instant(&mut self, mut tyct: TypeContext, ty: Type, expr: Expr) -> (Type, Expr) {
 		let ids: Vec<_> = tyct.free.iter().cloned().collect();
 		for id in ids {
 			let nid = self.gen_free();
 			tyct.add_bound(id, Type::Var(nid));
 		}
-		ty.simpl(&tyct)
+		(ty.simpl(&tyct), expr.simpl(&tyct))
 	}
 
 	pub fn flush_bounds(&mut self) {
@@ -440,9 +446,11 @@ impl Expr {
 					.collect(),
 			),
 			Expr::List(exprs) => Expr::List(exprs.into_iter().map(|x| x.simpl(tyct)).collect()),
-			Expr::Nil(expr) => Expr::Nil(Box::new(expr.simpl(tyct))),
-			Expr::Head(expr) => Expr::Head(Box::new(expr.simpl(tyct))),
-			Expr::Tail(expr) => Expr::Tail(Box::new(expr.simpl(tyct))),
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) =>
+				Expr::MatchOf(Box::new(expr0.simpl(tyct)), Box::new(expr1.simpl(tyct)), id0, id1, Box::new(expr2.simpl(tyct))),
+			// Expr::Nil(expr) => Expr::Nil(Box::new(expr.simpl(tyct))),
+			// Expr::Head(expr) => Expr::Head(Box::new(expr.simpl(tyct))),
+			// Expr::Tail(expr) => Expr::Tail(Box::new(expr.simpl(tyct))),
 			Expr::IfThenElse(cond, expr0, expr1) => Expr::IfThenElse(
 				Box::new(cond.simpl(tyct)),
 				Box::new(expr0.simpl(tyct)),
@@ -492,17 +500,22 @@ impl Context {
 	pub fn pop_all(&mut self) {
 		self.local.clear();
 	}
-
-	/// 获取某个标识符的类型，如果是全局标识符那么还会实例化
-	pub fn get_type(&self, id0: &String, tyct0: &mut TypeContext) -> Option<Type> {
-		for (id, ty) in self.local.iter().rev() {
-			if id == id0 {
+	
+	/// 获取局部标识符的类型
+	pub fn get_local(&self, id: &String) -> Option<Type> {
+		for (_id, ty) in self.local.iter().rev() {
+			if id == _id {
 				return Some(ty.clone());
 			}
 		}
+		None
+	}
+
+	/// 获取全局标识符的类型和表达式，并且实例化
+	pub fn get_global(&self, id0: &String, tyct0: &mut TypeContext) -> Option<(Type, Expr)> {
 		self.global
 			.get(id0)
-			.map(|x| tyct0.instant(TypeContext::new_with_free(x.0.clone()), x.1.clone()))
+			.map(|x| tyct0.instant(TypeContext::new_with_free(x.0.clone()), x.1.clone(), x.2.clone()))
 	}
 
 	pub fn get_expr(&self, id: &String) -> Option<&Expr> {

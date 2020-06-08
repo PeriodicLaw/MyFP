@@ -35,16 +35,17 @@ fn main() -> io::Result<()> {
 					if let Ok(ty) = ast.typecheck(&mut ct) {
 						// 化简求值
 						if let Ok(expr) = ast.expr.eval(&ct) {
-							// println!("before:");
-							// println!("expr = {}", expr);
-							// ast.tyct.eprint_bound();
+							println!("before:");
+							println!("expr = {}", expr);
+							ast.tyct.eprint_bound();
 
 							ast.tyct.rename();
+							let ty = ty.simpl(&ast.tyct);
 							let expr = expr.simpl(&ast.tyct);
 							ast.tyct.flush_bounds();
 
-							// println!("after:");
-							// println!("expr = {}", expr);
+							println!("after:");
+							println!("expr = {}", expr);
 
 							match ast.id {
 								Some(id) => {

@@ -16,11 +16,12 @@ pub enum Op {
 	LessEq,
 	Gre,
 	GreEq,
-	// && || ! ++
+	// && || ! :: ++
 	And,
 	Or,
 	Not,
 	Cons,
+	Concat,
 	// \ -> =>
 	Lambda,
 	To,
@@ -36,10 +37,11 @@ pub enum KeyWord {
 	Else,
 	Union,
 	Case,
+	Match,
 	Of,
-	Nil,
-	Head,
-	Tail,
+	// Nil,
+	// Head,
+	// Tail,
 	Fix,
 	Let,
 	Forall,
@@ -85,7 +87,7 @@ impl Iterator for TokenStream<'_> {
 						match self.chars.peek() {
 							Some((_, '+')) => {
 								self.chars.next();
-								Some((p, Token::Op(Op::Cons)))
+								Some((p, Token::Op(Op::Concat)))
 							}
 							_ => Some((p, Token::Op(Op::Add))),
 						}
@@ -167,8 +169,18 @@ impl Iterator for TokenStream<'_> {
 					}
 					'\\' => Some((self.chars.next()?.0, Token::Op(Op::Lambda))),
 					'_' => Some((self.chars.next()?.0, Token::Symbol('_'))),
+					':' => {
+						let p = self.chars.next()?.0;
+						match self.chars.peek() {
+							Some((_, ':')) => {
+								self.chars.next();
+								Some((p, Token::Op(Op::Cons)))
+							}
+							_ => Some((p, Token::Symbol(':'))),
+						}
+					}
 
-					'[' | ']' | '(' | ')' | ':' | ',' | '.' => {
+					'[' | ']' | '(' | ')' | ',' | '.' => {
 						let (p, c) = self.chars.next()?;
 						Some((p, Token::Symbol(c)))
 					}
@@ -198,9 +210,7 @@ impl Iterator for TokenStream<'_> {
 								"union" => Token::KeyWord(KeyWord::Union),
 								"case" => Token::KeyWord(KeyWord::Case),
 								"of" => Token::KeyWord(KeyWord::Of),
-								"nil" => Token::KeyWord(KeyWord::Nil),
-								"head" => Token::KeyWord(KeyWord::Head),
-								"tail" => Token::KeyWord(KeyWord::Tail),
+								"match" => Token::KeyWord(KeyWord::Match),
 								"fix" => Token::KeyWord(KeyWord::Fix),
 								"let" => Token::KeyWord(KeyWord::Let),
 								"forall" => Token::KeyWord(KeyWord::Forall),

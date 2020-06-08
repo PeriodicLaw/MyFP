@@ -1,4 +1,5 @@
 use crate::ast::{BinOp, Context, Expr, Type, TypeContext, UnaryOp, AST};
+use std::mem;
 
 impl AST {
 	pub fn typecheck(&mut self, ct: &mut Context) -> Result<Type, ()> {
@@ -18,7 +19,8 @@ impl AST {
 
 impl Expr {
 	/// 类型检查，推断出表达式的类型
-	fn typecheck(&self, ct: &mut Context, tyct: &mut TypeContext) -> Result<Type, ()> {
+	/// 与此同时，需要进行函数调用的实例化
+	fn typecheck(&mut self, ct: &mut Context, tyct: &mut TypeContext) -> Result<Type, ()> {
 		// println!("checking {} with {:?}", self, tyct);
 		match self {
 			Expr::Lambda(id, ty0, expr) => {
@@ -85,6 +87,13 @@ impl Expr {
 						Ok(Type::Bool)
 					}
 					BinOp::Cons => {
+						// 构造类型[α]，然后T0与α、T1与[α]合一
+						let _ty = Type::Var(tyct.gen_free());
+						unify(tyct, &ty0, &_ty)?;
+						unify(tyct, &ty1, &Type::List(Box::new(_ty)))?;
+						Ok(ty1.simpl(tyct))
+					}
+					BinOp::Concat => {
 						// 构造类型[α]，然后与T0和T1合一
 						let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
 						unify(tyct, &ty0, &_ty)?;
@@ -146,7 +155,7 @@ impl Expr {
 				let tye = expr.typecheck(ct, tyct)?;
 				if let Type::Union(tys) = &tye {
 					if cases.len() == tys.len() {
-						let it = cases.iter().zip(tys.iter());
+						let it = cases.iter_mut().zip(tys.iter());
 						let mut ty = None;
 						for ((tyc, id, exprc), tyu) in it {
 							unify(tyct, tyc, tyu)?;
@@ -162,7 +171,7 @@ impl Expr {
 						}
 						Ok(ty.unwrap().simpl(tyct))
 					} else {
-						eprintln!("type checker: '{}' has type '{}', which doesn't has the same lengths as cases in {}", expr, tye, self);
+						eprintln!("type checker: '{}' has type '{}', which doesn't has the same lengths as its cases", expr, tye);
 						Err(())
 					}
 				} else {
@@ -183,28 +192,38 @@ impl Expr {
 				}
 				Ok(Type::List(Box::new(ty)).simpl(tyct))
 			}
-			Expr::Nil(expr) => {
-				let ty = expr.typecheck(ct, tyct)?;
-				// 构造类型[α]，然后与T合一
-				let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
-				unify(tyct, &ty, &_ty)?;
-				Ok(Type::Bool)
-			}
-			Expr::Head(expr) => {
-				let ty = expr.typecheck(ct, tyct)?;
-				// 构造类型[α]，然后与T合一
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) => {
+				let ty0 = expr0.typecheck(ct, tyct)?;
+				// 构造类型[α]，然后与T0合一
 				let _id = tyct.gen_free();
 				let _ty = Type::List(Box::new(Type::Var(_id.clone())));
-				unify(tyct, &ty, &_ty)?;
-				Ok(Type::Var(_id).simpl(tyct))
+				unify(tyct, &ty0, &_ty)?;
+				// 让T1和T2合一
+				let ty1 = expr1.typecheck(ct, tyct)?;
+				ct.push(id0.clone(), Type::Var(_id));
+				ct.push(id1.clone(), _ty);
+				let ty2 = expr2.typecheck(ct, tyct)?;
+				unify(tyct, &ty1, &ty2)?;
+				Ok(ty1)
 			}
-			Expr::Tail(expr) => {
-				let ty = expr.typecheck(ct, tyct)?;
-				// 构造类型[α]，然后与T合一
-				let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
-				unify(tyct, &ty, &_ty)?;
-				Ok(ty.simpl(tyct))
-			}
+			// Expr::Nil(expr) => {
+			// 	Ok(Type::Bool)
+			// }
+			// Expr::Head(expr) => {
+			// 	let ty = expr.typecheck(ct, tyct)?;
+			// 	// 构造类型[α]，然后与T合一
+			// 	let _id = tyct.gen_free();
+			// 	let _ty = Type::List(Box::new(Type::Var(_id.clone())));
+			// 	unify(tyct, &ty, &_ty)?;
+			// 	Ok(Type::Var(_id).simpl(tyct))
+			// }
+			// Expr::Tail(expr) => {
+			// 	let ty = expr.typecheck(ct, tyct)?;
+			// 	// 构造类型[α]，然后与T合一
+			// 	let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
+			// 	unify(tyct, &ty, &_ty)?;
+			// 	Ok(ty.simpl(tyct))
+			// }
 			Expr::IfThenElse(cond, expr0, expr1) => {
 				let tyc = cond.typecheck(ct, tyct)?;
 				unify(tyct, &tyc, &Type::Bool)?;
@@ -214,8 +233,11 @@ impl Expr {
 				Ok(ty0.simpl(tyct))
 			}
 			Expr::Identifier(id) => {
-				if let Some(ty) = ct.get_type(id, tyct) {
-					Ok(ty.simpl(tyct))
+				if let Some(ty) = ct.get_local(id) {
+					Ok(ty)
+				} else if let Some((ty, expr)) = ct.get_global(id, tyct) {
+					let _ = mem::replace(self, expr);
+					Ok(ty)
 				} else {
 					eprintln!("type checker: there is not an identifier called '{}'", id);
 					Err(())

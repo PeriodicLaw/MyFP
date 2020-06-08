@@ -193,18 +193,18 @@ impl Parser<'_> {
 				))
 			}
 
-			Some((_, Token::KeyWord(KeyWord::Nil))) => {
-				self.consume();
-				Ok(Expr::Nil(Box::new(self.parse_term_expr(tyct)?)))
-			}
-			Some((_, Token::KeyWord(KeyWord::Head))) => {
-				self.consume();
-				Ok(Expr::Head(Box::new(self.parse_term_expr(tyct)?)))
-			}
-			Some((_, Token::KeyWord(KeyWord::Tail))) => {
-				self.consume();
-				Ok(Expr::Tail(Box::new(self.parse_term_expr(tyct)?)))
-			}
+			// Some((_, Token::KeyWord(KeyWord::Nil))) => {
+			// 	self.consume();
+			// 	Ok(Expr::Nil(Box::new(self.parse_term_expr(tyct)?)))
+			// }
+			// Some((_, Token::KeyWord(KeyWord::Head))) => {
+			// 	self.consume();
+			// 	Ok(Expr::Head(Box::new(self.parse_term_expr(tyct)?)))
+			// }
+			// Some((_, Token::KeyWord(KeyWord::Tail))) => {
+			// 	self.consume();
+			// 	Ok(Expr::Tail(Box::new(self.parse_term_expr(tyct)?)))
+			// }
 			Some((_, Token::KeyWord(KeyWord::Fix))) => {
 				self.consume();
 				Ok(Expr::Fix(Box::new(self.parse_term_expr(tyct)?)))
@@ -372,6 +372,23 @@ impl Parser<'_> {
 					}
 				}
 				Ok(Expr::CaseOf(Box::new(expr), cases))
+			}
+			Some((_, Token::KeyWord(KeyWord::Match))) => {
+				self.consume();
+				let expr0 = self.parse_expr(tyct)?;
+				self.expect(Token::KeyWord(KeyWord::Of))?;
+				self.expect(Token::Symbol('('))?;
+				self.expect(Token::Symbol('['))?;
+				self.expect(Token::Symbol(']'))?;
+				self.expect(Token::Op(Op::CaseTo))?;
+				let expr1 = self.parse_expr(tyct)?;
+				self.expect(Token::Symbol('|'))?;
+				let id0 = self.expect_identifier()?;
+				self.expect(Token::Op(Op::Cons))?;
+				let id1 = self.expect_identifier()?;
+				self.expect(Token::Op(Op::CaseTo))?;
+				let expr2 = self.parse_expr(tyct)?;
+				Ok(Expr::MatchOf(Box::new(expr0), Box::new(expr1), id0, id1, Box::new(expr2)))
 			}
 
 			Some((_, Token::KeyWord(KeyWord::If))) => {

@@ -122,6 +122,15 @@ impl Expr {
 						}
 					}
 					BinOp::Cons => {
+						if let Expr::List(mut exprs1) = expr1 {
+							exprs1.insert(0, expr0);
+							Ok(Expr::List(exprs1))
+						} else {
+							eprintln!("evaler: unable to eval '{}'", expr1);
+							Err(())
+						}
+					}
+					BinOp::Concat => {
 						if let Expr::List(mut exprs0) = expr0 {
 							if let Expr::List(mut exprs1) = expr1 {
 								exprs0.append(&mut exprs1);
@@ -191,39 +200,55 @@ impl Expr {
 				}
 				Ok(Expr::List(exprs0))
 			}
-			Expr::Nil(expr) => {
-				let expr = expr.eval(ct)?;
-				if let Expr::List(exprs) = expr {
-					Ok(Expr::Bool(exprs.is_empty()))
-				} else {
-					eprintln!("evaler: unable to eval '{}'", Expr::Nil(Box::new(expr)));
-					Err(())
-				}
-			}
-			Expr::Head(expr) => {
-				let expr = expr.eval(ct)?;
-				if let Expr::List(exprs) = expr {
-					match exprs.into_iter().next() {
-						Some(expr) => Ok(expr),
-						_ => {
-							eprintln!("evaler: cannot get the head of nil");
-							Err(())
-						}
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) => {
+				let expr0 = expr0.eval(ct)?;
+				if let Expr::List(exprs) = expr0 {
+					if exprs.is_empty() {
+						expr1.eval(ct)
+					} else {
+						let mut it = exprs.into_iter();
+						let head = it.next().unwrap();
+						let tail = Expr::List(it.collect());
+						Ok(expr2.subst(&id0, &head).subst(&id1, &tail))
 					}
 				} else {
-					eprintln!("evaler: unable to eval '{}'", Expr::Head(Box::new(expr)));
+					eprintln!("evaler: unable to eval '{}'", expr0);
 					Err(())
 				}
 			}
-			Expr::Tail(expr) => {
-				let expr = expr.eval(ct)?;
-				if let Expr::List(exprs) = expr {
-					Ok(Expr::List(exprs.into_iter().skip(1).collect()))
-				} else {
-					eprintln!("evaler: unable to eval '{}'", Expr::Tail(Box::new(expr)));
-					Err(())
-				}
-			}
+			// Expr::Nil(expr) => {
+			// 	let expr = expr.eval(ct)?;
+			// 	if let Expr::List(exprs) = expr {
+			// 		Ok(Expr::Bool(exprs.is_empty()))
+			// 	} else {
+			// 		eprintln!("evaler: unable to eval '{}'", Expr::Nil(Box::new(expr)));
+			// 		Err(())
+			// 	}
+			// }
+			// Expr::Head(expr) => {
+			// 	let expr = expr.eval(ct)?;
+			// 	if let Expr::List(exprs) = expr {
+			// 		match exprs.into_iter().next() {
+			// 			Some(expr) => Ok(expr),
+			// 			_ => {
+			// 				eprintln!("evaler: cannot get the head of nil");
+			// 				Err(())
+			// 			}
+			// 		}
+			// 	} else {
+			// 		eprintln!("evaler: unable to eval '{}'", Expr::Head(Box::new(expr)));
+			// 		Err(())
+			// 	}
+			// }
+			// Expr::Tail(expr) => {
+			// 	let expr = expr.eval(ct)?;
+			// 	if let Expr::List(exprs) = expr {
+			// 		Ok(Expr::List(exprs.into_iter().skip(1).collect()))
+			// 	} else {
+			// 		eprintln!("evaler: unable to eval '{}'", Expr::Tail(Box::new(expr)));
+			// 		Err(())
+			// 	}
+			// }
 			Expr::IfThenElse(cond, expr0, expr1) => {
 				if let Expr::Bool(x) = cond.eval(ct)? {
 					if x {
@@ -299,9 +324,11 @@ impl Expr {
 			Expr::List(exprs) => {
 				Expr::List(exprs.into_iter().map(|x| x.subst(idsub, exprsub)).collect())
 			}
-			Expr::Nil(expr) => Expr::Nil(Box::new(expr.subst(idsub, exprsub))),
-			Expr::Head(expr) => Expr::Head(Box::new(expr.subst(idsub, exprsub))),
-			Expr::Tail(expr) => Expr::Tail(Box::new(expr.subst(idsub, exprsub))),
+			Expr::MatchOf(expr0, expr1, id0, id1, expr2) =>
+				Expr::MatchOf(Box::new(expr0.subst(idsub, exprsub)), Box::new(expr1.subst(idsub, exprsub)), id0, id1, Box::new(expr2.subst(idsub, exprsub))),
+			// Expr::Nil(expr) => Expr::Nil(Box::new(expr.subst(idsub, exprsub))),
+			// Expr::Head(expr) => Expr::Head(Box::new(expr.subst(idsub, exprsub))),
+			// Expr::Tail(expr) => Expr::Tail(Box::new(expr.subst(idsub, exprsub))),
 			Expr::IfThenElse(cond, expr0, expr1) => Expr::IfThenElse(
 				Box::new(cond.subst(idsub, exprsub)),
 				Box::new(expr0.subst(idsub, exprsub)),
