@@ -1,4 +1,4 @@
-use crate::ast::{BinOp, Expr, Type, UnaryOp, AST};
+use crate::ast::{BinOp, Expr, Type, TypeContext, UnaryOp, AST};
 use crate::lexer::{KeyWord, Op, Token, TokenStream};
 use std::iter::Peekable;
 
@@ -15,41 +15,44 @@ impl Parser<'_> {
 
 	/// 解析Token流为AST
 	pub fn parse(&mut self) -> Result<AST, Option<usize>> {
-		match self.peek() {
-			Some((_, Token::KeyWord(KeyWord::Let))) => {
+		let mut tyct = TypeContext::new();
+		let mut id = None;
+		let mut ty = None;
+		if let Some((_, Token::KeyWord(KeyWord::Let))) = self.peek() {
+			self.consume();
+			id = Some(self.expect_identifier()?);
+			if let Some((_, Token::Symbol(':'))) = self.peek() {
 				self.consume();
-				let id = self.expect_identifier()?;
-				match self.peek() {
-					Some((_, Token::Symbol('='))) => {
-						self.consume();
-						Ok(AST::Let(id, None, self.parse_expr()?))
-					}
-					_ => {
-						self.expect(Token::Symbol(':'))?;
-						let ty = self.parse_type()?;
-						self.expect(Token::Symbol('='))?;
-						let expr = self.parse_expr()?;
-						Ok(AST::Let(id, Some(ty), expr))
+				while let Some((_, Token::KeyWord(KeyWord::Forall))) = self.peek() {
+					self.consume();
+					let tid = self.expect_identifier()?;
+					if !tyct.add_free(tid.clone()) {
+						// 这一步实际上已经在parser里做了一些语义的事情了，不是很合适
+						eprintln!("parser: type variable identifier '{}' repeated", tid);
+						return Err(self.peek().map(|x| x.0));
 					}
 				}
+				ty = Some(self.parse_type(&mut tyct)?);
 			}
-			_ => Ok(AST::Expr(self.parse_expr()?)),
+			self.expect(Token::Symbol('='))?;
 		}
+		let expr = self.parse_expr(&mut tyct)?;
+		Ok(AST { id, tyct, ty, expr })
 	}
 
 	/// 解析外层类型，由若干函数类型组成
-	fn parse_type(&mut self) -> Result<Type, Option<usize>> {
-		let ty = self.parse_atom_type()?;
+	fn parse_type(&mut self, tyct: &mut TypeContext) -> Result<Type, Option<usize>> {
+		let ty = self.parse_atom_type(tyct)?;
 		if let Some((_, Token::Op(Op::To))) = self.peek() {
 			self.consume();
-			Ok(Type::Func(Box::new(ty), Box::new(self.parse_type()?)))
+			Ok(Type::Func(Box::new(ty), Box::new(self.parse_type(tyct)?)))
 		} else {
 			Ok(ty)
 		}
 	}
 
 	/// 解析原子类型
-	fn parse_atom_type(&mut self) -> Result<Type, Option<usize>> {
+	fn parse_atom_type(&mut self, tyct: &mut TypeContext) -> Result<Type, Option<usize>> {
 		match self.peek() {
 			Some((_, Token::KeyWord(KeyWord::Int))) => {
 				self.consume();
@@ -65,7 +68,7 @@ impl Parser<'_> {
 					self.consume();
 					return Ok(Type::Tuple(Vec::new()));
 				}
-				let ty = self.parse_type()?;
+				let ty = self.parse_type(tyct)?;
 				match self.peek() {
 					Some((_, Token::Symbol(')'))) => {
 						self.consume();
@@ -77,10 +80,10 @@ impl Parser<'_> {
 							self.consume();
 							return Ok(Type::Tuple(vec![ty]));
 						}
-						let mut tys = vec![ty, self.parse_type()?];
+						let mut tys = vec![ty, self.parse_type(tyct)?];
 						while let Some((_, Token::Symbol(','))) = self.peek() {
 							self.consume();
-							tys.push(self.parse_type()?);
+							tys.push(self.parse_type(tyct)?);
 						}
 						self.expect(Token::Symbol(')'))?;
 						Ok(Type::Tuple(tys))
@@ -89,7 +92,7 @@ impl Parser<'_> {
 						let mut tys = vec![ty];
 						while let Some((_, Token::Symbol('|'))) = self.peek() {
 							self.consume();
-							tys.push(self.parse_type()?);
+							tys.push(self.parse_type(tyct)?);
 						}
 						self.expect(Token::Symbol(')'))?;
 						Ok(Type::Union(tys))
@@ -102,9 +105,23 @@ impl Parser<'_> {
 			}
 			Some((_, Token::Symbol('['))) => {
 				self.consume();
-				let ty = self.parse_type()?;
+				let ty = self.parse_type(tyct)?;
 				self.expect(Token::Symbol(']'))?;
 				Ok(Type::List(Box::new(ty)))
+			}
+			Some((_, Token::Symbol('_'))) => {
+				self.consume();
+				Ok(Type::Var(tyct.gen_free()))
+			}
+			Some((x, Token::Identifier(s))) => {
+				let s = s.clone();
+				if tyct.has_var(&s) {
+					self.consume();
+					Ok(Type::Var(s))
+				} else {
+					eprintln!("parser: type variable '{}' not found in ct", s); // 这里也是做了一点语义上的分析
+					Err(Some(*x))
+				}
 			}
 			x => {
 				eprintln!("parser: expected a type");
@@ -114,8 +131,8 @@ impl Parser<'_> {
 	}
 
 	/// 解析最外层的表达式，由二元运算组成
-	fn parse_expr(&mut self) -> Result<Expr, Option<usize>> {
-		let mut expr_stack = vec![self.parse_term_expr()?];
+	fn parse_expr(&mut self, tyct: &mut TypeContext) -> Result<Expr, Option<usize>> {
+		let mut expr_stack = vec![self.parse_term_expr(tyct)?];
 		let mut op_stack: Vec<BinOp> = vec![];
 		loop {
 			match self.peek() {
@@ -135,7 +152,7 @@ impl Parser<'_> {
 						break;
 					}
 					op_stack.push(op);
-					expr_stack.push(self.parse_term_expr()?);
+					expr_stack.push(self.parse_term_expr(tyct)?);
 					continue;
 				}
 				// 遇到非二元运算符，表明表达式结束
@@ -152,49 +169,49 @@ impl Parser<'_> {
 	}
 
 	/// 解析项表达式，由前缀的一元运算符、函数调用组成
-	fn parse_term_expr(&mut self) -> Result<Expr, Option<usize>> {
+	fn parse_term_expr(&mut self, tyct: &mut TypeContext) -> Result<Expr, Option<usize>> {
 		match self.peek() {
 			Some((_, Token::Op(Op::Not))) => {
 				self.consume();
 				Ok(Expr::UnaryOp(
 					UnaryOp::Not,
-					Box::new(self.parse_term_expr()?),
+					Box::new(self.parse_term_expr(tyct)?),
 				))
 			}
 			Some((_, Token::Op(Op::Add))) => {
 				self.consume();
 				Ok(Expr::UnaryOp(
 					UnaryOp::Add,
-					Box::new(self.parse_term_expr()?),
+					Box::new(self.parse_term_expr(tyct)?),
 				))
 			}
 			Some((_, Token::Op(Op::Minus))) => {
 				self.consume();
 				Ok(Expr::UnaryOp(
 					UnaryOp::Minus,
-					Box::new(self.parse_term_expr()?),
+					Box::new(self.parse_term_expr(tyct)?),
 				))
 			}
 
 			Some((_, Token::KeyWord(KeyWord::Nil))) => {
 				self.consume();
-				Ok(Expr::Nil(Box::new(self.parse_term_expr()?)))
+				Ok(Expr::Nil(Box::new(self.parse_term_expr(tyct)?)))
 			}
 			Some((_, Token::KeyWord(KeyWord::Head))) => {
 				self.consume();
-				Ok(Expr::Head(Box::new(self.parse_term_expr()?)))
+				Ok(Expr::Head(Box::new(self.parse_term_expr(tyct)?)))
 			}
 			Some((_, Token::KeyWord(KeyWord::Tail))) => {
 				self.consume();
-				Ok(Expr::Tail(Box::new(self.parse_term_expr()?)))
+				Ok(Expr::Tail(Box::new(self.parse_term_expr(tyct)?)))
 			}
 			Some((_, Token::KeyWord(KeyWord::Fix))) => {
 				self.consume();
-				Ok(Expr::Fix(Box::new(self.parse_term_expr()?)))
+				Ok(Expr::Fix(Box::new(self.parse_term_expr(tyct)?)))
 			}
 
 			_ => {
-				let mut expr = self.parse_suffix_expr()?;
+				let mut expr = self.parse_suffix_expr(tyct)?;
 				loop {
 					if match self.peek() {
 						// 这里特别指定了什么符号意味着一个项的结束，可能不太合适
@@ -215,7 +232,7 @@ impl Parser<'_> {
 					} {
 						return Ok(expr);
 					} else {
-						expr = Expr::Apply(Box::new(expr), Box::new(self.parse_suffix_expr()?));
+						expr = Expr::Apply(Box::new(expr), Box::new(self.parse_suffix_expr(tyct)?));
 					}
 				}
 			}
@@ -223,8 +240,8 @@ impl Parser<'_> {
 	}
 
 	/// 解析后缀表达式
-	fn parse_suffix_expr(&mut self) -> Result<Expr, Option<usize>> {
-		let mut expr = self.parse_atom_expr()?;
+	fn parse_suffix_expr(&mut self, tyct: &mut TypeContext) -> Result<Expr, Option<usize>> {
+		let mut expr = self.parse_atom_expr(tyct)?;
 		while let Some((_, Token::Symbol('.'))) = self.peek() {
 			self.consume();
 			let x = self.expect_int()?;
@@ -234,7 +251,7 @@ impl Parser<'_> {
 	}
 
 	/// 解析原子表达式，由关键字表达式、字面值、括号、列表、标识符等组成
-	fn parse_atom_expr(&mut self) -> Result<Expr, Option<usize>> {
+	fn parse_atom_expr(&mut self, tyct: &mut TypeContext) -> Result<Expr, Option<usize>> {
 		match self.peek() {
 			Some((_, Token::Int(x))) => {
 				let x = *x;
@@ -258,7 +275,7 @@ impl Parser<'_> {
 					self.consume();
 					return Ok(Expr::Tuple(Vec::new()));
 				}
-				let expr = self.parse_expr()?;
+				let expr = self.parse_expr(tyct)?;
 				match self.peek() {
 					Some((_, Token::Symbol(')'))) => {
 						self.consume();
@@ -270,10 +287,10 @@ impl Parser<'_> {
 							self.consume();
 							return Ok(Expr::Tuple(vec![expr]));
 						}
-						let mut exprs = vec![expr, self.parse_expr()?];
+						let mut exprs = vec![expr, self.parse_expr(tyct)?];
 						while let Some((_, Token::Symbol(','))) = self.peek() {
 							self.consume();
-							exprs.push(self.parse_expr()?);
+							exprs.push(self.parse_expr(tyct)?);
 						}
 						self.expect(Token::Symbol(')'))?;
 						Ok(Expr::Tuple(exprs))
@@ -290,10 +307,10 @@ impl Parser<'_> {
 					self.consume();
 					return Ok(Expr::List(vec![]));
 				}
-				let mut exprs = vec![self.parse_expr()?];
+				let mut exprs = vec![self.parse_expr(tyct)?];
 				while let Some((_, Token::Symbol(','))) = self.peek() {
 					self.consume();
-					exprs.push(self.parse_expr()?);
+					exprs.push(self.parse_expr(tyct)?);
 				}
 				self.expect(Token::Symbol(']'))?;
 				Ok(Expr::List(exprs))
@@ -304,10 +321,10 @@ impl Parser<'_> {
 				self.expect(Token::Symbol('('))?;
 				let mut unions = vec![];
 				loop {
-					let ty = self.parse_type()?;
+					let ty = self.parse_type(tyct)?;
 					let expr = match self.peek() {
 						Some((_, Token::Symbol('|'))) | Some((_, Token::Symbol(')'))) => None,
-						_ => Some(self.parse_expr()?),
+						_ => Some(self.parse_expr(tyct)?),
 					};
 					unions.push((ty, expr));
 					match self.peek() {
@@ -329,15 +346,15 @@ impl Parser<'_> {
 			}
 			Some((_, Token::KeyWord(KeyWord::Case))) => {
 				self.consume();
-				let expr = self.parse_expr()?;
+				let expr = self.parse_expr(tyct)?;
 				self.expect(Token::KeyWord(KeyWord::Of))?;
 				self.expect(Token::Symbol('('))?;
 				let mut cases = vec![];
 				loop {
-					let ty = self.parse_type()?;
+					let ty = self.parse_type(tyct)?;
 					let id = self.expect_identifier()?;
 					self.expect(Token::Op(Op::CaseTo))?;
-					let expr = self.parse_expr()?;
+					let expr = self.parse_expr(tyct)?;
 					cases.push((ty, id, expr));
 					match self.peek() {
 						Some((_, Token::Symbol('|'))) => {
@@ -359,11 +376,11 @@ impl Parser<'_> {
 
 			Some((_, Token::KeyWord(KeyWord::If))) => {
 				self.consume();
-				let cond = self.parse_expr()?;
+				let cond = self.parse_expr(tyct)?;
 				self.expect(Token::KeyWord(KeyWord::Then))?;
-				let expr0 = self.parse_expr()?;
+				let expr0 = self.parse_expr(tyct)?;
 				self.expect(Token::KeyWord(KeyWord::Else))?;
-				let expr1 = self.parse_expr()?;
+				let expr1 = self.parse_expr(tyct)?;
 				Ok(Expr::IfThenElse(
 					Box::new(cond),
 					Box::new(expr0),
@@ -374,9 +391,13 @@ impl Parser<'_> {
 			Some((_, Token::Op(Op::Lambda))) => {
 				self.consume();
 				let id = self.expect_identifier()?;
-				self.expect(Token::Symbol(':'))?;
-				let ty = self.parse_type()?;
-				let expr = self.parse_expr()?;
+				let ty = if let Some((_, Token::Symbol(':'))) = self.peek() {
+					self.consume();
+					self.parse_type(tyct)?
+				} else {
+					Type::Var(tyct.gen_free())
+				};
+				let expr = self.parse_expr(tyct)?;
 				Ok(Expr::Lambda(id, ty, Box::new(expr)))
 			}
 

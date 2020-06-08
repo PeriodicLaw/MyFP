@@ -2,17 +2,17 @@ use crate::ast::{BinOp, Context, Expr, UnaryOp};
 
 impl Expr {
 	/// 化简求值，按照惰性求值的原则将表达式尽可能化简
-	pub fn eval(self, context: &Context) -> Result<Self, ()> {
+	pub fn eval(self, ct: &Context) -> Result<Self, ()> {
 		match self {
 			Expr::Lambda(_, _, _) => Ok(self), // 惰性求值
 			Expr::Apply(expr0, expr1) => {
-				let expr0 = expr0.eval(context)?;
-				let expr1 = expr1.eval(context)?;
+				let expr0 = expr0.eval(ct)?;
+				let expr1 = expr1.eval(ct)?;
 				if let Expr::Lambda(id, _, expr) = expr0 {
-					expr.subst(&id, &expr1).eval(context)
+					expr.subst(&id, &expr1).eval(ct)
 				} else if let Expr::Fix(expr) = expr0 {
 					// (fix F) x = F (fix F) x
-					let expr = expr.eval(context)?;
+					let expr = expr.eval(ct)?;
 					Ok(Expr::Apply(
 						Box::new(Expr::Apply(
 							Box::new(expr.clone()),
@@ -20,14 +20,14 @@ impl Expr {
 						)),
 						Box::new(expr1),
 					)
-					.eval(context)?)
+					.eval(ct)?)
 				} else {
 					unreachable!()
 				}
 			}
 			Expr::Fix(_) => Ok(self),
 			Expr::UnaryOp(op, expr) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				match op {
 					UnaryOp::Add => Ok(expr),
 					UnaryOp::Minus => {
@@ -49,8 +49,8 @@ impl Expr {
 				}
 			}
 			Expr::BinOp(op, expr0, expr1) => {
-				let expr0 = expr0.eval(context)?;
-				let expr1 = expr1.eval(context)?;
+				let expr0 = expr0.eval(ct)?;
+				let expr1 = expr1.eval(ct)?;
 				match op {
 					BinOp::Add | BinOp::Minus | BinOp::Mult | BinOp::Divide => {
 						if let Expr::Int(x0) = expr0 {
@@ -140,12 +140,12 @@ impl Expr {
 			Expr::Tuple(exprs) => {
 				let mut exprs0 = vec![];
 				for expr in exprs {
-					exprs0.push(expr.eval(context)?);
+					exprs0.push(expr.eval(ct)?);
 				}
 				Ok(Expr::Tuple(exprs0))
 			}
 			Expr::TupleIndex(expr, index) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				if let Expr::Tuple(exprs) = expr {
 					Ok(exprs[index].clone())
 				} else {
@@ -160,7 +160,7 @@ impl Expr {
 				let mut unions0 = vec![];
 				for (ty, expr) in unions {
 					if let Some(expr) = expr {
-						unions0.push((ty, Some(expr.eval(context)?)));
+						unions0.push((ty, Some(expr.eval(ct)?)));
 					} else {
 						unions0.push((ty, None));
 					}
@@ -168,11 +168,11 @@ impl Expr {
 				Ok(Expr::Union(unions0))
 			}
 			Expr::CaseOf(expr, cases) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				if let Expr::Union(unions) = expr {
 					for ((_, expru), (_, id, exprc)) in unions.into_iter().zip(cases.into_iter()) {
 						if let Some(expru) = expru {
-							return Ok(exprc.subst(&id, &expru).eval(context)?);
+							return Ok(exprc.subst(&id, &expru).eval(ct)?);
 						}
 					}
 					unreachable!()
@@ -187,12 +187,12 @@ impl Expr {
 			Expr::List(exprs) => {
 				let mut exprs0 = vec![];
 				for expr in exprs {
-					exprs0.push(expr.eval(context)?);
+					exprs0.push(expr.eval(ct)?);
 				}
 				Ok(Expr::List(exprs0))
 			}
 			Expr::Nil(expr) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				if let Expr::List(exprs) = expr {
 					Ok(Expr::Bool(exprs.is_empty()))
 				} else {
@@ -201,7 +201,7 @@ impl Expr {
 				}
 			}
 			Expr::Head(expr) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				if let Expr::List(exprs) = expr {
 					match exprs.into_iter().next() {
 						Some(expr) => Ok(expr),
@@ -216,7 +216,7 @@ impl Expr {
 				}
 			}
 			Expr::Tail(expr) => {
-				let expr = expr.eval(context)?;
+				let expr = expr.eval(ct)?;
 				if let Expr::List(exprs) = expr {
 					Ok(Expr::List(exprs.into_iter().skip(1).collect()))
 				} else {
@@ -225,18 +225,18 @@ impl Expr {
 				}
 			}
 			Expr::IfThenElse(cond, expr0, expr1) => {
-				if let Expr::Bool(x) = cond.eval(context)? {
+				if let Expr::Bool(x) = cond.eval(ct)? {
 					if x {
-						expr0.eval(context)
+						expr0.eval(ct)
 					} else {
-						expr1.eval(context)
+						expr1.eval(ct)
 					}
 				} else {
 					unreachable!()
 				}
 			}
 			Expr::Identifier(id) => {
-				if let Some(expr) = context.get_expr(&id) {
+				if let Some(expr) = ct.get_expr(&id) {
 					Ok(expr.clone())
 				} else {
 					eprintln!("evaler: cannot find expression named by {}", id);

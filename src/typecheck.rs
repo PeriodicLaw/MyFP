@@ -1,74 +1,73 @@
-use crate::ast::{BinOp, Context, Expr, Type, UnaryOp, AST};
+use crate::ast::{BinOp, Context, Expr, Type, TypeContext, UnaryOp, AST};
+
+impl AST {
+	pub fn typecheck(&mut self, ct: &mut Context) -> Result<Type, ()> {
+		let AST {
+			id: _,
+			tyct,
+			ty,
+			expr,
+		} = self;
+		let tyc = expr.typecheck(ct, tyct)?;
+		if let Some(ty) = ty {
+			unify(tyct, ty, &tyc)?;
+		}
+		Ok(tyc)
+	}
+}
 
 impl Expr {
 	/// 类型检查，推断出表达式的类型
-	fn typecheck(&self, context: &mut Context) -> Result<Type, ()> {
+	fn typecheck(&self, ct: &mut Context, tyct: &mut TypeContext) -> Result<Type, ()> {
+		// println!("checking {} with {:?}", self, tyct);
 		match self {
 			Expr::Lambda(id, ty0, expr) => {
-				context.push(id.clone(), ty0.clone());
-				let ty1 = expr.typecheck(context)?;
-				context.pop();
+				ct.push(id.clone(), ty0.clone());
+				let ty1 = expr.typecheck(ct, tyct)?;
+				ct.pop();
 				Ok(Type::Func(Box::new(ty0.clone()), Box::new(ty1)))
 			}
 			Expr::Apply(expr0, expr1) => {
-				let ty0 = expr0.typecheck(context)?;
-				let ty1 = expr1.typecheck(context)?;
-				match ty0 {
-					Type::Func(box tya, box tyb) if ty1 == tya => Ok(tyb),
-					_ => {
-						eprintln!("type checker: '{}' has type '{}', which can not applied to '{}' with type '{}'", expr0, ty0, expr1, ty1);
-						Err(())
-					}
-				}
+				let ty0 = expr0.typecheck(ct, tyct)?;
+				let ty1 = expr1.typecheck(ct, tyct)?;
+				// 构造类型T1 -> α，然后与T0合一
+				let _id = tyct.gen_free();
+				let ty = Type::Func(Box::new(ty1), Box::new(Type::Var(_id.clone())));
+				unify(tyct, &ty0, &ty)?;
+				Ok(Type::Var(_id))
 			}
 			Expr::Fix(expr) => {
-				let ty = expr.typecheck(context)?;
-				match ty {
-					Type::Func(box ty0, box ty1) if ty0 == ty1 => Ok(ty0),
-					_ => {
-						eprintln!("type checker: '{}' has type '{}', which is not like 'α→α' and can not be fixed", expr, ty);
-						Err(())
-					}
-				}
+				let ty = expr.typecheck(ct, tyct)?;
+				// 构造类型α -> α，然后与T合一
+				let _id = tyct.gen_free();
+				let _ty = Type::Func(
+					Box::new(Type::Var(_id.clone())),
+					Box::new(Type::Var(_id.clone())),
+				);
+				unify(tyct, &ty, &_ty)?;
+				Ok(Type::Var(_id))
 			}
 			Expr::UnaryOp(op, expr) => {
-				let ty = expr.typecheck(context)?;
+				let ty = expr.typecheck(ct, tyct)?;
 				match op {
 					UnaryOp::Add | UnaryOp::Minus => {
-						if ty == Type::Int {
-							Ok(Type::Int)
-						} else {
-							eprintln!(
-								"type checker: '{}' has type '{}', which is not integer",
-								expr, ty
-							);
-							Err(())
-						}
+						unify(tyct, &ty, &Type::Int)?;
+						Ok(Type::Int)
 					}
 					UnaryOp::Not => {
-						if ty == Type::Bool {
-							Ok(Type::Bool)
-						} else {
-							eprintln!(
-								"type checker: '{}' has type '{}', which is not boolean",
-								expr, ty
-							);
-							Err(())
-						}
+						unify(tyct, &ty, &Type::Bool)?;
+						Ok(Type::Bool)
 					}
 				}
 			}
 			Expr::BinOp(op, expr0, expr1) => {
-				let ty0 = expr0.typecheck(context)?;
-				let ty1 = expr1.typecheck(context)?;
+				let ty0 = expr0.typecheck(ct, tyct)?;
+				let ty1 = expr1.typecheck(ct, tyct)?;
 				match op {
 					BinOp::Add | BinOp::Minus | BinOp::Mult | BinOp::Divide => {
-						if ty0 == Type::Int && ty1 == Type::Int {
-							Ok(Type::Int)
-						} else {
-							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both integer", expr0, ty0, expr1, ty1);
-							Err(())
-						}
+						unify(tyct, &ty0, &Type::Int)?;
+						unify(tyct, &ty1, &Type::Int)?;
+						Ok(Type::Int)
 					}
 					BinOp::Eq
 					| BinOp::NotEq
@@ -76,41 +75,33 @@ impl Expr {
 					| BinOp::LessEq
 					| BinOp::Gre
 					| BinOp::GreEq => {
-						if ty0 == Type::Int && ty1 == Type::Int {
-							Ok(Type::Bool)
-						} else {
-							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both integer", expr0, ty0, expr1, ty1);
-							Err(())
-						}
+						unify(tyct, &ty0, &Type::Int)?;
+						unify(tyct, &ty1, &Type::Int)?;
+						Ok(Type::Bool)
 					}
 					BinOp::And | BinOp::Or => {
-						if ty0 == Type::Bool && ty1 == Type::Bool {
-							Ok(ty0)
-						} else {
-							eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not both boolean", expr0, ty0, expr1, ty1);
-							Err(())
-						}
+						unify(tyct, &ty0, &Type::Bool)?;
+						unify(tyct, &ty1, &Type::Bool)?;
+						Ok(Type::Bool)
 					}
 					BinOp::Cons => {
-						if let Type::List(_) = ty0 {
-							if ty0 == ty1 {
-								return Ok(ty0);
-							}
-						}
-						eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not the same list type", expr0, ty0, expr1, ty1);
-						Err(())
+						// 构造类型[α]，然后与T0和T1合一
+						let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
+						unify(tyct, &ty0, &_ty)?;
+						unify(tyct, &ty1, &_ty)?;
+						Ok(_ty)
 					}
 				}
 			}
 			Expr::Tuple(exprs) => {
 				let mut tys = vec![];
 				for expr in exprs {
-					tys.push(expr.typecheck(context)?)
+					tys.push(expr.typecheck(ct, tyct)?)
 				}
 				Ok(Type::Tuple(tys))
 			}
 			Expr::TupleIndex(expr, index) => {
-				let ty = expr.typecheck(context)?;
+				let ty = expr.typecheck(ct, tyct)?;
 				if let Type::Tuple(tys) = &ty {
 					if (0..tys.len()).contains(index) {
 						Ok(tys[*index].clone())
@@ -119,9 +110,10 @@ impl Expr {
 						Err(())
 					}
 				} else {
+					// 我们的HM类型系统是无法推断x.0(其中x:α)的，因为无法表达变长的类型表达式
 					eprintln!(
-						"type checker: '{}' has type '{}', which is not a tuple",
-						expr, ty
+						"type checker: can not infer '{}' as a specific tuple type, which is the type of '{}'",
+						ty, expr
 					);
 					Err(())
 				}
@@ -135,11 +127,8 @@ impl Expr {
 							eprintln!("type checker: '{}' has more than 1 case", self);
 							return Err(());
 						} else {
-							let tyc = expr.typecheck(context)?;
-							if ty != &tyc {
-								eprintln!("type checker: '{}' has type '{}', but defined as '{}' in union", expr, tyc, ty);
-								return Err(());
-							}
+							let tyc = expr.typecheck(ct, tyct)?;
+							unify(tyct, ty, &tyc)?;
 							has_expr = true;
 						}
 					}
@@ -154,28 +143,22 @@ impl Expr {
 			Expr::CaseOf(expr, cases) => {
 				// expr: tye = Union(tys) 为被展开的union
 				// tyc id => exprc: tyec 为其中某一个case，其在tye中的对应项为tyu
-				let tye = expr.typecheck(context)?;
+				let tye = expr.typecheck(ct, tyct)?;
 				if let Type::Union(tys) = &tye {
 					if cases.len() == tys.len() {
 						let it = cases.iter().zip(tys.iter());
 						let mut ty = None;
 						for ((tyc, id, exprc), tyu) in it {
-							if tyc != tyu {
-								eprintln!("type checker: type '{}' is not the same as corresponding type {} in '{}'", tyc, tyu, tye);
-								return Err(());
-							}
-							context.push(id.clone(), tyc.clone());
-							let tyec = exprc.typecheck(context)?;
+							unify(tyct, tyc, tyu)?;
+							ct.push(id.clone(), tyc.clone());
+							let tyec = exprc.typecheck(ct, tyct)?;
 							if let Some(ty) = &ty {
-								if ty != &tyec {
-									eprintln!("type checker: cases in '{}' have different types: '{}' and '{}'", self, ty, tyec);
-									return Err(());
-								}
+								unify(tyct, ty, &tyec)?;
 							} else {
 								// 第一个case
 								ty = Some(tyec);
 							}
-							context.pop();
+							ct.pop();
 						}
 						Ok(ty.unwrap())
 					} else {
@@ -183,93 +166,56 @@ impl Expr {
 						Err(())
 					}
 				} else {
+					// 同样，这里也无法推断case x of (...)，其中x:α
 					eprintln!(
-						"type checker: '{}' has type '{}', which is not an union",
-						expr, tye
+						"type checker: can not infer '{}' as a specific union type, which is the type of '{}'",
+						tye, expr
 					);
 					Err(())
 				}
 			}
 			Expr::List(exprs) => {
-				let mut ty = None;
+				// 构造类型α，然后与列表中的每一项合一
+				let ty = Type::Var(tyct.gen_free());
 				for expr in exprs {
-					let tye = expr.typecheck(context)?;
-					if let Some(ty) = &ty {
-						if ty != &tye {
-							eprintln!(
-								"type checker: terms in {} have different types: '{}' and '{}'",
-								self, ty, tye
-							);
-							return Err(());
-						}
-					} else {
-						ty = Some(tye);
-					}
+					let tye = expr.typecheck(ct, tyct)?;
+					unify(tyct, &ty, &tye)?;
 				}
-				if ty == None {
-					eprintln!("type checker: can not infer empty list's type (todo!)");
-					todo!();
-				}
-				Ok(Type::List(Box::new(ty.unwrap())))
+				Ok(Type::List(Box::new(ty)))
 			}
 			Expr::Nil(expr) => {
-				let ty = expr.typecheck(context)?;
-				if let Type::List(_) = ty {
-					Ok(Type::Bool)
-				} else {
-					eprintln!(
-						"type checker: '{}' has type '{}', which is not a list",
-						expr, ty
-					);
-					Err(())
-				}
+				let ty = expr.typecheck(ct, tyct)?;
+				// 构造类型[α]，然后与T合一
+				let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
+				unify(tyct, &ty, &_ty)?;
+				Ok(Type::Bool)
 			}
 			Expr::Head(expr) => {
-				let ty = expr.typecheck(context)?;
-				if let Type::List(box ty) = ty {
-					Ok(ty)
-				} else {
-					eprintln!(
-						"type checker: '{}' has type '{}', which is not a list",
-						expr, ty
-					);
-					Err(())
-				}
+				let ty = expr.typecheck(ct, tyct)?;
+				// 构造类型[α]，然后与T合一
+				let _id = tyct.gen_free();
+				let _ty = Type::List(Box::new(Type::Var(_id.clone())));
+				unify(tyct, &ty, &_ty)?;
+				Ok(Type::Var(_id))
 			}
 			Expr::Tail(expr) => {
-				let ty = expr.typecheck(context)?;
-				if let Type::List(_) = ty {
-					Ok(ty)
-				} else {
-					eprintln!(
-						"type checker: '{}' has type '{}', which is not a list",
-						expr, ty
-					);
-					Err(())
-				}
+				let ty = expr.typecheck(ct, tyct)?;
+				// 构造类型[α]，然后与T合一
+				let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
+				unify(tyct, &ty, &_ty)?;
+				Ok(ty)
 			}
 			Expr::IfThenElse(cond, expr0, expr1) => {
-				let tyc = cond.typecheck(context)?;
-				if tyc == Type::Bool {
-					let ty0 = expr0.typecheck(context)?;
-					let ty1 = expr1.typecheck(context)?;
-					if ty0 == ty1 {
-						Ok(ty0)
-					} else {
-						eprintln!("type checker: '{}' has type '{}', '{}' has type '{}', which are not the same", expr0, ty0, expr1, ty1);
-						Err(())
-					}
-				} else {
-					eprintln!(
-						"type checker: '{}' has type '{}', which is not a boolean",
-						cond, tyc
-					);
-					Err(())
-				}
+				let tyc = cond.typecheck(ct, tyct)?;
+				unify(tyct, &tyc, &Type::Bool)?;
+				let ty0 = expr0.typecheck(ct, tyct)?;
+				let ty1 = expr1.typecheck(ct, tyct)?;
+				unify(tyct, &ty0, &ty1)?;
+				Ok(ty0)
 			}
 			Expr::Identifier(id) => {
-				if let Some(ty) = context.get_type(id) {
-					Ok(ty.clone())
+				if let Some(ty) = ct.get_type(id, tyct) {
+					Ok(ty)
 				} else {
 					eprintln!("type checker: there is not an identifier called '{}'", id);
 					Err(())
@@ -281,22 +227,102 @@ impl Expr {
 	}
 }
 
-impl AST {
-	pub fn typecheck(&self, context: &mut Context) -> Result<Type, ()> {
-		match self {
-			AST::Let(_, Some(ty), expr) => {
-				let tyc = expr.typecheck(context)?;
-				if ty == &tyc {
-					Ok(tyc)
-				} else {
-					eprintln!(
-						"type checker: '{}' has type '{}', but defined as type '{}'",
-						expr, tyc, ty
-					);
-					Err(())
+/// 合一代换：为ty0和ty1中出现的自由变量寻找一种代换，使得ty0和ty1相同
+/// 完成合一代换后会自动为tyct添加代换规则
+/// 为了方便报错，这里会调用一个递归版本的函数，如果出错则给出完整错误信息
+fn unify(tyct: &mut TypeContext, ty0: &Type, ty1: &Type) -> Result<(), ()> {
+	// println!("unifing {} and {} in {:?} where", ty0, ty1, tyct);tyct.eprint_bound();
+	if _unify(tyct, ty0, ty1) {
+		Ok(())
+	} else {
+		eprintln!(
+			"              occurs when unifing type '{}' and '{}'",
+			ty0, ty1
+		);
+		eprintln!("              where: ");
+		tyct.eprint_bound();
+		Err(())
+	}
+}
+
+// 递归版本
+fn _unify(tyct: &mut TypeContext, ty0: &Type, ty1: &Type) -> bool {
+	// println!("unifing {} and {}", ty0, ty1);
+	match (ty0, ty1) {
+		(Type::Var(id0), Type::Var(id1)) if id0 == id1 => true,
+		// 我们可能遇到一个自由变量自己与自己合一的情况，为了避免错误地产生代换，最开始就要将可能出现的代换全部做完
+		(Type::Var(id), _) if tyct.get_bound(id).is_some() => {
+			_unify(tyct, &tyct.get_bound(id).unwrap().clone(), ty1)
+		}
+		(_, Type::Var(id)) if tyct.get_bound(id).is_some() => {
+			_unify(tyct, ty0, &tyct.get_bound(id).unwrap().clone())
+		}
+		(Type::Var(id), _) => {
+			if occurs_check(tyct, ty1, id) {
+				eprintln!(
+					"type checker: occurs check failed, because '{}' occurs in '{}'",
+					id, ty1
+				);
+				false
+			} else {
+				tyct.add_bound(id.clone(), ty1.clone());
+				true
+			}
+		}
+		(_, Type::Var(id)) => {
+			if occurs_check(tyct, ty0, id) {
+				eprintln!(
+					"type checker: occurs check failed, because '{}' occurs in '{}'",
+					id, ty0
+				);
+				false
+			} else {
+				tyct.add_bound(id.clone(), ty0.clone());
+				true
+			}
+		}
+		(Type::Int, Type::Int) => true,
+		(Type::Bool, Type::Bool) => true,
+		(Type::Func(ty00, ty01), Type::Func(ty10, ty11)) => {
+			_unify(tyct, ty00, ty10) && _unify(tyct, ty01, ty11)
+		}
+		(Type::Tuple(tys0), Type::Tuple(tys1)) | (Type::Union(tys0), Type::Union(tys1)) => {
+			for (ty0, ty1) in tys0.iter().zip(tys1) {
+				if !_unify(tyct, ty0, ty1) {
+					return false;
 				}
 			}
-			AST::Let(_, None, expr) | AST::Expr(expr) => expr.typecheck(context),
+			true
+		}
+		(Type::List(ty0), Type::List(ty1)) => _unify(tyct, ty0, ty1),
+		_ => {
+			eprintln!("type checker: '{}' and '{}' have different type", ty0, ty1);
+			false
+		}
+	}
+}
+
+// 发生检查
+fn occurs_check(tyct: &TypeContext, ty: &Type, id: &String) -> bool {
+	// println!("occurs checking {} in {}", id, ty);
+	match ty {
+		Type::Int | Type::Bool => false,
+		Type::Func(ty0, ty1) => occurs_check(tyct, ty0, id) || occurs_check(tyct, ty1, id),
+		Type::Tuple(tys) | Type::Union(tys) => {
+			for ty in tys {
+				if occurs_check(tyct, ty, id) {
+					return true;
+				}
+			}
+			false
+		}
+		Type::List(ty) => occurs_check(tyct, ty, id),
+		Type::Var(_id) => {
+			if let Some(ty) = tyct.get_bound(_id) {
+				occurs_check(tyct, ty, id)
+			} else {
+				_id == id
+			}
 		}
 	}
 }

@@ -6,25 +6,35 @@
 
 - [x] 词法和语法分析
 - [x] 类型检查与惰性求值
-- [ ] HM类型系统及类型推导
+- [x] HM类型系统及类型推导
 - [ ] 库函数
 
-## 预期效果
-
-### 基本功能
+## 效果
 
 ```
-> let add = \x:Int \y:Int x+y;
-add : Int → Int → Int
-add = λx:Int. λy:Int. x + y
-
-> add 3 4;
-7 : Int
-
-> let fact:Int->Int = fix \f:Int->Int \x:Int if x == 0 then 1 else f(x-1)*x;
+> let fact = fix \f \x if x==0 then 1 else f(x-1)*x;
 fact : Int → Int
 fact = fix (λf:Int → Int. λx:Int. if x == 0 then 1 else (f (x - 1)) * x)
 
 > fact 5;
-120 : Int
+120 :  Int
+```
+
+```
+> let map = fix \map \f \l if nil l then [] else [f (head l)] ++ map f (tail l);
+map : ∀ α ∀ β (β → α) → [β] → [α]
+map = fix (λmap:(β → α) → [β] → [α]. λf:β → α. λl:[β]. if nil (l) then [] else [f head (l)] ++ ((map f) tail (l)))
+
+> map fact [1,2,3,4,5];
+[1, 2, 6, 24, 120] :  [Int]
+```
+
+```
+> let curry = \f \x \y f (x,y);
+curry : ∀ α ∀ β ∀ γ ((α, β) → γ) → α → β → γ
+curry = λf:(α, β) → γ. λx:α. λy:β. f (x, y)
+
+> let uncurry = \f \x:(_,_) f x.0 x.1;
+uncurry : ∀ α ∀ β ∀ γ (α → β → γ) → (α, β) → γ
+uncurry = λf:α → β → γ. λx:(α, β). (f x.0) x.1
 ```

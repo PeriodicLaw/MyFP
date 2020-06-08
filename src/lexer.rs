@@ -42,13 +42,14 @@ pub enum KeyWord {
 	Tail,
 	Fix,
 	Let,
+	Forall,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
 	Identifier(String),
 	KeyWord(KeyWord),
-	Symbol(char), // ( ) [ ] = : , |
+	Symbol(char), // ( ) [ ] = : , | _
 	Op(Op),
 	Int(i32),
 	Bool(bool),
@@ -165,12 +166,14 @@ impl Iterator for TokenStream<'_> {
 						}
 					}
 					'\\' => Some((self.chars.next()?.0, Token::Op(Op::Lambda))),
+					'_' => Some((self.chars.next()?.0, Token::Symbol('_'))),
 
 					'[' | ']' | '(' | ')' | ':' | ',' | '.' => {
 						let (p, c) = self.chars.next()?;
 						Some((p, Token::Symbol(c)))
 					}
-					'a'..='z' | 'A'..='Z' | '_' => {
+					'a'..='z' | 'A'..='Z' => {
+						// 标识符必须由字母开头，但可以包括字母、数字、下划线
 						let p = self.chars.peek()?.0;
 						let s: String = self
 							.chars
@@ -200,6 +203,7 @@ impl Iterator for TokenStream<'_> {
 								"tail" => Token::KeyWord(KeyWord::Tail),
 								"fix" => Token::KeyWord(KeyWord::Fix),
 								"let" => Token::KeyWord(KeyWord::Let),
+								"forall" => Token::KeyWord(KeyWord::Forall),
 								"true" => Token::Bool(true),
 								"false" => Token::Bool(false),
 								_ => Token::Identifier(s),

@@ -4,10 +4,14 @@
 
 ```
 T :=
-	Int | Bool | T -> T | (T)
+	Int | Bool | T -> T | (T) |
+	_ | id						// _为匿名的类型变量，id则为显式的类型变量
 	() | (T,) | (T, ..., T) |	// 积类型或元组类型，可以为空，如果只有一个T则必须在末尾加一个逗号
 	(T | ... | T) |				// 和类型或union类型，至少要有一个
 	[T]							// 列表类型
+
+TS :=
+	forall id ... forall id T		// Type Scheme，带类型变量参数的类型
 ```
 
 表达式：
@@ -25,7 +29,7 @@ E :=
 	[E, ..., E] |								// 列表构造
 	nil E | head E | tail E |
 
-	lambda id:T E |								// lambda表达式
+	lambda id:T E | lambda id E					// lambda表达式
 	E E |										// 函数调用
 	fix E
 ```
@@ -40,5 +44,7 @@ E :=
 
 ```
 S :=
-	let id = E | let id: T = E | E
+	let id = E | let id: TS = E | E
 ```
+
+表达式需要有类型变量时，在TS中写forall a _这类形式。
