@@ -12,7 +12,7 @@ impl AST {
 		if let Some(ty) = ty {
 			unify(tyct, ty, &tyc)?;
 		}
-		Ok(tyc)
+		Ok(tyc.simpl(tyct))
 	}
 }
 
@@ -25,7 +25,7 @@ impl Expr {
 				ct.push(id.clone(), ty0.clone());
 				let ty1 = expr.typecheck(ct, tyct)?;
 				ct.pop();
-				Ok(Type::Func(Box::new(ty0.clone()), Box::new(ty1)))
+				Ok(Type::Func(Box::new(ty0.clone()), Box::new(ty1)).simpl(tyct))
 			}
 			Expr::Apply(expr0, expr1) => {
 				let ty0 = expr0.typecheck(ct, tyct)?;
@@ -34,7 +34,7 @@ impl Expr {
 				let _id = tyct.gen_free();
 				let ty = Type::Func(Box::new(ty1), Box::new(Type::Var(_id.clone())));
 				unify(tyct, &ty0, &ty)?;
-				Ok(Type::Var(_id))
+				Ok(Type::Var(_id).simpl(tyct))
 			}
 			Expr::Fix(expr) => {
 				let ty = expr.typecheck(ct, tyct)?;
@@ -45,7 +45,7 @@ impl Expr {
 					Box::new(Type::Var(_id.clone())),
 				);
 				unify(tyct, &ty, &_ty)?;
-				Ok(Type::Var(_id))
+				Ok(Type::Var(_id).simpl(tyct))
 			}
 			Expr::UnaryOp(op, expr) => {
 				let ty = expr.typecheck(ct, tyct)?;
@@ -89,7 +89,7 @@ impl Expr {
 						let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
 						unify(tyct, &ty0, &_ty)?;
 						unify(tyct, &ty1, &_ty)?;
-						Ok(_ty)
+						Ok(_ty.simpl(tyct))
 					}
 				}
 			}
@@ -98,13 +98,13 @@ impl Expr {
 				for expr in exprs {
 					tys.push(expr.typecheck(ct, tyct)?)
 				}
-				Ok(Type::Tuple(tys))
+				Ok(Type::Tuple(tys).simpl(tyct))
 			}
 			Expr::TupleIndex(expr, index) => {
 				let ty = expr.typecheck(ct, tyct)?;
 				if let Type::Tuple(tys) = &ty {
 					if (0..tys.len()).contains(index) {
-						Ok(tys[*index].clone())
+						Ok(tys[*index].clone().simpl(tyct))
 					} else {
 						eprintln!("type checker: '{}' has type '{}', which is a tuple of lenght {} and can not be indexed by {}", expr, ty, tys.len(), index);
 						Err(())
@@ -138,7 +138,7 @@ impl Expr {
 					eprintln!("type checker: '{}' has no case", self);
 					return Err(());
 				}
-				Ok(Type::Union(tys))
+				Ok(Type::Union(tys).simpl(tyct))
 			}
 			Expr::CaseOf(expr, cases) => {
 				// expr: tye = Union(tys) 为被展开的union
@@ -160,7 +160,7 @@ impl Expr {
 							}
 							ct.pop();
 						}
-						Ok(ty.unwrap())
+						Ok(ty.unwrap().simpl(tyct))
 					} else {
 						eprintln!("type checker: '{}' has type '{}', which doesn't has the same lengths as cases in {}", expr, tye, self);
 						Err(())
@@ -181,7 +181,7 @@ impl Expr {
 					let tye = expr.typecheck(ct, tyct)?;
 					unify(tyct, &ty, &tye)?;
 				}
-				Ok(Type::List(Box::new(ty)))
+				Ok(Type::List(Box::new(ty)).simpl(tyct))
 			}
 			Expr::Nil(expr) => {
 				let ty = expr.typecheck(ct, tyct)?;
@@ -196,14 +196,14 @@ impl Expr {
 				let _id = tyct.gen_free();
 				let _ty = Type::List(Box::new(Type::Var(_id.clone())));
 				unify(tyct, &ty, &_ty)?;
-				Ok(Type::Var(_id))
+				Ok(Type::Var(_id).simpl(tyct))
 			}
 			Expr::Tail(expr) => {
 				let ty = expr.typecheck(ct, tyct)?;
 				// 构造类型[α]，然后与T合一
 				let _ty = Type::List(Box::new(Type::Var(tyct.gen_free())));
 				unify(tyct, &ty, &_ty)?;
-				Ok(ty)
+				Ok(ty.simpl(tyct))
 			}
 			Expr::IfThenElse(cond, expr0, expr1) => {
 				let tyc = cond.typecheck(ct, tyct)?;
@@ -211,11 +211,11 @@ impl Expr {
 				let ty0 = expr0.typecheck(ct, tyct)?;
 				let ty1 = expr1.typecheck(ct, tyct)?;
 				unify(tyct, &ty0, &ty1)?;
-				Ok(ty0)
+				Ok(ty0.simpl(tyct))
 			}
 			Expr::Identifier(id) => {
 				if let Some(ty) = ct.get_type(id, tyct) {
-					Ok(ty)
+					Ok(ty.simpl(tyct))
 				} else {
 					eprintln!("type checker: there is not an identifier called '{}'", id);
 					Err(())

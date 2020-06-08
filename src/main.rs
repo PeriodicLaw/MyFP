@@ -40,7 +40,6 @@ fn main() -> io::Result<()> {
 							// ast.tyct.eprint_bound();
 
 							ast.tyct.rename();
-							let ty = ty.simpl(&ast.tyct);
 							let expr = expr.simpl(&ast.tyct);
 							ast.tyct.flush_bounds();
 
@@ -53,7 +52,7 @@ fn main() -> io::Result<()> {
 									println!("{} : {}{}\n{} = {}", id, ast.tyct, ty, id, expr);
 									ct.add(id, ast.tyct.free, ty, expr);
 								}
-								None => println!("{} : {} {}", expr, ast.tyct, ty), // 匿名表达式，直接给出结果即可
+								None => println!("{} : {}{}", expr, ast.tyct, ty), // 匿名表达式，直接给出结果即可
 							}
 						}
 					}
