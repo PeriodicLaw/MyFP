@@ -142,7 +142,7 @@ impl Parser<'_> {
 					self.consume();
 
 					while let Some(op0) = op_stack.last() {
-						if op0.prior() >= op.prior() {
+						if BinOp::greater(op0, &op) {
 							let op0 = op_stack.pop().unwrap();
 							let op2 = expr_stack.pop().unwrap();
 							let op1 = expr_stack.pop().unwrap();

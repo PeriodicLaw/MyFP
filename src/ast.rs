@@ -109,7 +109,7 @@ impl UnaryOp {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BinOp {
 	Add,
 	Minus,
@@ -167,7 +167,7 @@ impl BinOp {
 		}
 	}
 
-	pub fn prior(&self) -> i32 {
+	fn prior(&self) -> i32 {
 		match self {
 			BinOp::Or => 0,
 			BinOp::And => 1,
@@ -175,6 +175,15 @@ impl BinOp {
 			BinOp::Cons | BinOp::Concat => 3,
 			BinOp::Add | BinOp::Minus => 4,
 			BinOp::Mult | BinOp::Divide => 5,
+		}
+	}
+	
+	/// op0是栈顶，op1是新运算符，返回是否需要弹出栈顶（是否左结合）
+	pub fn greater(op0: &BinOp, op1: &BinOp) -> bool {
+		if *op0 == BinOp::Cons && *op1 == BinOp::Cons {
+			false
+		} else {
+			op0.prior() >= op1.prior()
 		}
 	}
 }
