@@ -7,7 +7,8 @@
 - [x] 词法和语法分析
 - [x] 类型检查与惰性求值
 - [x] HM类型系统及类型推导
-- [ ] 实现Monad
+- [ ] HKT、类型约束（类型类） *咕咕咕*
+- [ ] Char、Monad、Parse Combinator *咕咕咕*
 
 ## 效果
 
@@ -20,8 +21,12 @@ fact = fix (λf:Int → Int. λx:Int. if x == 0 then 1 else (f (x - 1)) * x)
 map : ∀ α ∀ β (α → β) → [α] → [β]
 map = fix (λmap:(α → β) → [α] → [β]. λf:α → β. λl:[α]. match l of ([] ⇒ [] | x::xs ⇒ (f x) :: (map f xs)))
 
-> map fact [0,1,2,3,4,5];
-[1, 1, 2, 6, 24, 120] : [Int]
+> let gen = fix \gen \x if x == 0 then [0] else (gen (x-1)) ++ [x];
+gen : Int → [Int]
+gen = fix (λgen:Int → [Int]. λx:Int. if x == 0 then [0] else (gen (x - 1)) ++ [x])
+
+> map fact (gen 10);
+[1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800] : [Int]
 ```
 
 ```
@@ -41,6 +46,42 @@ combine = λf1:α → γ. λf2:β → γ. λx:(α | β). case x of (α a ⇒ f1 
 diverse : ∀ α ∀ β ∀ γ ((β | α) → γ) → (β → γ, α → γ)
 diverse = λf:(β | α) → γ. (λx:β. f union (β x | α), λy:α. f union (β | α y))
 ```
+
+试一下Maybe Monad：
+
+```
+> let just = \x union ( _ x | () );
+just : ∀ α α → (α | ())
+just = λx:α. union (α x | ())
+
+> let nothing = union ( _ | _ ());
+nothing : ∀ α (α | ())
+nothing = union (α | () ())
+
+> let return = just;
+return : ∀ α α → (α | ())
+return = λx:α. union (α x | ())
+
+> let bind = \x \f case x of ( _ x => f x | () x => union ( _ | () () ) );
+bind : ∀ α ∀ β (α | ()) → (α → (β | ())) → (β | ())
+bind = λx:(α | ()). λf:α → (β | ()). case x of (α x ⇒ f x | () x ⇒ union (β | () ()))
+```
+
+```
+> let safe_head = \l match l of ( [] => union ( _ | () () ) | x::xs => union ( _ x | _ ));
+safe_head : ∀ α [α] → (α | ())
+safe_head = λl:[α]. match l of ([] ⇒ union (α | () ()) | x::xs ⇒ union (α x | ()))
+
+> let safe_tail = \l match l of ( [] => union ( _ | () () ) | x::xs => union ( _ xs | _ ));
+safe_tail : ∀ α [α] → ([α] | ())
+safe_tail = λl:[α]. match l of ([] ⇒ union ([α] | () ()) | x::xs ⇒ union ([α] xs | ()))
+
+> bind (just [1,2,3]) \x bind (safe_tail x) \y bind (safe_head y) \z return (z*10);
+union (Int 20 | ()) : (Int | ())
+```
+
+（注：最后一句实质上是`just [1,2,3] >>= \x safe_tail x >>= \y safe_head y >>= \z return (z*10)`，
+或者用do：`do { x <- just [1,2,3]; y <- safe_tail x; z <- safe_head y; return (z*10) }`）
 
 ## 文档
 
