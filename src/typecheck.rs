@@ -364,7 +364,10 @@ impl Expr {
 				ct.push(id1.clone(), _ty);
 				let ty2 = expr2.typecheck(ct, tyct)?;
 				if !unify(tyct, &ty1, &ty2) {
-					eprintln!("type checker: unifing because expression '{}' and '{}' in 2 match branches should have the same type", expr1, expr2);
+					eprintln!(
+						"type checker: unifing because expression '{}' and '{}' in 2 match branches should have the same type",
+						expr1, expr2
+					);
 					return Err(());
 				}
 				Ok(ty1.simpl(tyct))
@@ -381,7 +384,10 @@ impl Expr {
 				let ty0 = expr0.typecheck(ct, tyct)?;
 				let ty1 = expr1.typecheck(ct, tyct)?;
 				if !unify(tyct, &ty0, &ty1) {
-					eprintln!("type checker: unifing because the expression '{}' in then branch and '{}' in else branch should have the same type", expr0, expr1);
+					eprintln!(
+						"type checker: unifing because the expression '{}' in then branch and '{}' in else branch should have the same type",
+						expr0, expr1
+					);
 					return Err(());
 				}
 				Ok(ty0.simpl(tyct))
@@ -459,10 +465,9 @@ fn _unify(tyct: &mut TypeContext, ty0: &Type, ty1: &Type) -> bool {
 		(Type::Func(ty00, ty01), Type::Func(ty10, ty11)) => {
 			_unify(tyct, ty00, ty10) && _unify(tyct, ty01, ty11)
 		}
-		(Type::Tuple(tys0), Type::Tuple(tys1)) | (Type::Union(tys0), Type::Union(tys1)) => {
-			if tys0.len() != tys1.len() {
-				return false;
-			}
+		(Type::Tuple(tys0), Type::Tuple(tys1)) | (Type::Union(tys0), Type::Union(tys1))
+			if tys0.len() == tys1.len() =>
+		{
 			for (ty0, ty1) in tys0.iter().zip(tys1) {
 				if !_unify(tyct, ty0, ty1) {
 					return false;
